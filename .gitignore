@@ -1,0 +1,51 @@
+# Environment
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Raw CSV download caches (reproduced by ingestion; HuggingFace does not need them)
+data/cdc_places_raw.csv
+data/cdc_places_county_raw.csv
+data/cdc_mortality_raw.csv
+# Legacy db from before rename to healthgpt.db
+data/healthpub.db
+# NOTE: data/healthgpt.db, data/mmwr_pdfs/, and data/chroma_db/ are intentionally
+# NOT excluded — HuggingFace Spaces needs these pre-built files to serve the app.
+
+# Logs
+query_log.txt
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Local tool caches
+.claude/
+.gradio/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
