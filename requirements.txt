@@ -14,9 +14,11 @@ pydantic-ai==1.86.0
 pydantic==2.12.5
 
 # ---------------------------------------------------------------------------
-# LLM provider
+# LLM providers
 # ---------------------------------------------------------------------------
 anthropic==0.96.0
+openai==2.32.0               # required for OpenAI model support in PydanticAI
+groq>=0.8.0                  # required for Groq model support in PydanticAI
 
 # ---------------------------------------------------------------------------
 # Vector database and embeddings

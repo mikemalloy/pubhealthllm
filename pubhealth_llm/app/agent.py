@@ -42,10 +42,27 @@ from pubhealth_llm.app.tools import (
 
 load_dotenv()
 
-ANTHROPIC_MODEL_NAME = "claude-sonnet-4-5"
 LOG_FILE = "query_log.txt"
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Model registry
+# ---------------------------------------------------------------------------
+
+# Maps dropdown key → (provider, actual API model ID)
+_MODEL_MAP: dict[str, tuple[str, str]] = {
+    "anthropic:claude-sonnet-4-6":      ("anthropic", "claude-sonnet-4-6"),
+    "anthropic:claude-haiku-4":         ("anthropic", "claude-haiku-4-5-20251001"),
+    "openai:gpt-4o-mini":               ("openai",    "gpt-4o-mini"),
+    "groq:llama-3.3-70b-versatile":     ("groq",      "llama-3.3-70b-versatile"),
+    "groq:llama-3.1-8b-instant":        ("groq",      "llama-3.1-8b-instant"),
+}
+
+DEFAULT_MODEL_KEY = "anthropic:claude-sonnet-4-6"
+
+# Per-model agent cache — agents are heavyweight; create each once
+_agent_cache: dict[str, Agent] = {}
 
 # ---------------------------------------------------------------------------
 # System prompt
@@ -132,34 +149,105 @@ beyond prevalence — death rates are the most compelling data point in budget
 arguments.
 """
 
+# Condensed prompt for Groq models — same tool-routing rules, no verbose
+# writing instructions.  Groq free tier caps at 12,000 TPM; the full prompt
+# plus 8 tool definitions pushes requests over that limit.
+SYSTEM_PROMPT_GROQ = """
+You are pubHealthLLM, a public health decision support assistant.
+Answer questions using CDC MMWR surveillance reports and CDC PLACES county-level
+health statistics. Always call tools — never fabricate statistics.
+
+## TOOL SELECTION
+
+- Named location stats (county/state): tool_get_health_statistics
+- Worst counties for ONE measure: tool_get_worst_counties_by_measure
+- Comparing named locations: tool_compare_locations
+- Outbreak history or disease trends: tool_search_mmwr_reports
+- Unclear what measures exist: tool_get_available_measures first
+- Combined burden across 2+ measures: tool_rank_counties_composite (call ONCE)
+- Death rates / leading causes / mortality comparisons: tool_get_mortality_data or tool_compare_mortality
+
+For multi-measure prioritization use tool_rank_counties_composite with all
+measures in one call — do NOT substitute repeated tool_get_worst_counties_by_measure calls.
+
+## ALWAYS
+- Cite exact values and collection year
+- Note confidence intervals where available
+- Acknowledge data limitations (survey-based, may lag 1-2 years)
+- Every response must include a disclaimer that outputs are decision support only
+  and require validation by qualified public health professionals
+"""
+
 # ---------------------------------------------------------------------------
 # Agent setup
 # ---------------------------------------------------------------------------
 
 
-def _create_agent() -> Agent:
+def _create_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
     """
     Instantiate and configure the PydanticAI agent with all tools.
 
-    Called once at module load time.  The agent is a module-level
-    singleton; Gradio's async event loop calls run_agent() which
-    invokes agent.run() on it.
+    Creates an agent for the given model key (e.g. "anthropic:claude-sonnet-4-6").
+    Results are cached in _agent_cache — this function is called at most once
+    per unique model key.
+
+    Args:
+        model_key: One of the keys defined in _MODEL_MAP.
 
     Returns:
         Configured PydanticAI Agent instance.
+
+    Raises:
+        EnvironmentError: If the required API key for the provider is not set.
+        ValueError:       If model_key is not in _MODEL_MAP.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "ANTHROPIC_API_KEY not set. Add it to your .env file and restart."
+    if model_key not in _MODEL_MAP:
+        raise ValueError(
+            f"Unknown model key {model_key!r}. "
+            f"Valid options: {list(_MODEL_MAP)}"
         )
 
-    model = AnthropicModel(ANTHROPIC_MODEL_NAME, provider=AnthropicProvider(api_key=api_key))
+    provider, api_model_id = _MODEL_MAP[model_key]
+
+    if provider == "anthropic":
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise EnvironmentError(
+                "ANTHROPIC_API_KEY not set. Add it to your .env file and restart."
+            )
+        model = AnthropicModel(api_model_id, provider=AnthropicProvider(api_key=api_key))
+
+    elif provider == "openai":
+        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise EnvironmentError(
+                "OPENAI_API_KEY not set. Add it to your .env file to use OpenAI models."
+            )
+        model = OpenAIModel(api_model_id, provider=OpenAIProvider(api_key=api_key))
+
+    elif provider == "groq":
+        from pydantic_ai.models.groq import GroqModel
+        from pydantic_ai.providers.groq import GroqProvider
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise EnvironmentError(
+                "GROQ_API_KEY not set. Add it to your .env file to use Groq models."
+            )
+        model = GroqModel(api_model_id, provider=GroqProvider(api_key=api_key))
+
+    else:
+        raise ValueError(f"Unknown provider {provider!r} in model key {model_key!r}")
+
+    # Groq free tier: 12,000 TPM limit. Use the condensed prompt to keep
+    # requests under the limit. Anthropic models use the full rich prompt.
+    system_prompt = SYSTEM_PROMPT_GROQ if provider == "groq" else SYSTEM_PROMPT
 
     agent: Agent[None, PublicHealthResponse] = Agent(
         model=model,
         output_type=PublicHealthResponse,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
     )
 
     # -----------------------------------------------------------------------
@@ -312,27 +400,22 @@ def _create_agent() -> Agent:
     return agent
 
 
-# Module-level agent singleton
-_agent: Optional[Agent] = None
-
-
-def get_agent() -> Agent:
+def get_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
     """
-    Return the module-level agent singleton, creating it if needed.
+    Return a cached agent for the given model key, creating it if needed.
 
-    Lazy initialization allows importing this module without a
-    GROQ_API_KEY (useful for testing tools.py independently).
+    Lazy initialization means importing this module never triggers an API
+    key check — useful for testing tools.py independently.
+
+    Args:
+        model_key: One of the keys defined in _MODEL_MAP.
 
     Returns:
-        The configured PydanticAI Agent.
-
-    Raises:
-        EnvironmentError: If GROQ_API_KEY is not set.
+        The configured PydanticAI Agent for that model.
     """
-    global _agent
-    if _agent is None:
-        _agent = _create_agent()
-    return _agent
+    if model_key not in _agent_cache:
+        _agent_cache[model_key] = _create_agent(model_key)
+    return _agent_cache[model_key]
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +450,7 @@ def _log_query(question: str, response_summary: str) -> None:
 async def run_agent(
     question: str,
     message_history: Optional[list] = None,
+    model: Optional[str] = None,
 ) -> PublicHealthResponse:
     """
     Run the pubHealthLLM agent on a user question.
@@ -379,6 +463,8 @@ async def run_agent(
         question:        The user's natural language question.
         message_history: Optional list of prior conversation messages
                          for multi-turn context.
+        model:           Model key from _MODEL_MAP (e.g. "anthropic:claude-sonnet-4-6").
+                         Defaults to DEFAULT_MODEL_KEY if not provided.
 
     Returns:
         A validated PublicHealthResponse with summary, evidence,
@@ -388,8 +474,9 @@ async def run_agent(
         Exception: Propagated from PydanticAI on fatal errors.
                    The Gradio layer catches these and shows a user message.
     """
-    agent = get_agent()
-    logger.info("Running agent for question: %r", question)
+    model_key = model or DEFAULT_MODEL_KEY
+    agent = get_agent(model_key)
+    logger.info("Running agent (model=%r) for question: %r", model_key, question)
 
     try:
         result = await agent.run(
@@ -411,7 +498,7 @@ async def run_agent(
             evidence=[f"Error details: {str(exc)[:300]}"],
             caveats=[
                 "The data ingestion pipeline may not have been run yet.",
-                "Check that ANTHROPIC_API_KEY is set correctly in your .env file.",
+                "Check that the required API key for the selected model is set in your .env file.",
             ],
             sources=["No data retrieved due to error."],
         )

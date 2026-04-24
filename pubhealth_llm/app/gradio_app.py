@@ -76,6 +76,17 @@ EXAMPLE_QUESTIONS = [
     "What are the leading causes of death in Louisiana and how do cardiovascular mortality rates compare to neighboring states?",
 ]
 
+# Model selector — (display label, value passed to run_agent)
+MODEL_OPTIONS = [
+    ("Claude Sonnet 4.6 — Best quality (default)", "anthropic:claude-sonnet-4-6"),
+    ("Claude Haiku 4.5 — Fast, lower cost",         "anthropic:claude-haiku-4"),
+    ("GPT-4o mini — Reliable, low cost (OpenAI)",   "openai:gpt-4o-mini"),
+    ("Llama 3.3 70B — Fast, free (Groq)",            "groq:llama-3.3-70b-versatile"),
+    ("Llama 3.1 8B Instant — Fastest, free (Groq)",  "groq:llama-3.1-8b-instant"),
+]
+DEFAULT_MODEL = "anthropic:claude-sonnet-4-6"
+MODEL_NOTE = "Claude Sonnet recommended for best quality. Llama models are faster and free."
+
 # Map from Gradio role strings to PydanticAI message types
 _ROLE_MAP = {"user": "user", "assistant": "assistant"}
 
@@ -186,6 +197,7 @@ def _build_contextual_question(
 async def chat(
     message: str,
     history: list[dict],
+    model: str = DEFAULT_MODEL,
 ) -> str:
     """
     Async chat handler called by Gradio on each user message.
@@ -193,13 +205,14 @@ async def chat(
     This function is the bridge between the Gradio UI and the
     PydanticAI agent.  It:
       1. Injects conversation history as context in the user message
-      2. Calls run_agent() asynchronously
+      2. Calls run_agent() asynchronously with the selected model
       3. Formats the PublicHealthResponse as markdown for display
 
     Args:
         message: Current user message string.
         history: List of prior {"role", "content"} message dicts
                  maintained by Gradio ChatInterface.
+        model:   Model key selected in the UI dropdown.
 
     Returns:
         Agent response formatted as a markdown string.
@@ -210,7 +223,9 @@ async def chat(
     contextual_question = _build_contextual_question(message.strip(), history)
 
     try:
-        response: PublicHealthResponse = await run_agent(contextual_question)
+        response: PublicHealthResponse = await run_agent(
+            contextual_question, model=model
+        )
         return _format_response(response)
     except Exception as exc:
         logger.error("Chat handler error: %s", exc, exc_info=True)
@@ -242,10 +257,28 @@ def build_app() -> gr.ChatInterface:
         gr.HTML(DISCLAIMER_HTML)
         gr.HTML(DATA_SOURCES_HTML)
 
+        # Model selector
+        model_dropdown = gr.Dropdown(
+            choices=MODEL_OPTIONS,
+            value=DEFAULT_MODEL,
+            label="Model",
+            show_label=True,
+            interactive=True,
+            scale=1,
+        )
+        gr.Markdown(
+            f"<p style='font-size:0.8rem; color:#666; margin-top:2px;'>{MODEL_NOTE}</p>"
+        )
+
         # Chat interface
+        # When additional_inputs are present Gradio requires examples as
+        # [[message, input1, input2, ...]] — include the default model value.
+        examples_with_model = [[q, DEFAULT_MODEL] for q in EXAMPLE_QUESTIONS]
+
         chat_interface = gr.ChatInterface(
             fn=chat,
-            examples=EXAMPLE_QUESTIONS,
+            additional_inputs=[model_dropdown],
+            examples=examples_with_model,
             cache_examples=False,
             chatbot=gr.Chatbot(
                 label="Conversation",
@@ -266,8 +299,8 @@ def build_app() -> gr.ChatInterface:
         # Footer
         gr.HTML(
             "<div style='text-align:center; margin-top:12px; font-size:0.75rem; color:#999;'>"
-            "pubHealthLLM v1 · Powered by Groq llama-3.3-70b-versatile · "
-            "Data: CDC PLACES 2023, CDC MMWR 2022–2024"
+            "pubHealthLLM v1 · "
+            "Data: CDC PLACES 2023, CDC MMWR 2022–2024, CDC NCHS Mortality 1999–2017"
             "</div>"
         )
 
