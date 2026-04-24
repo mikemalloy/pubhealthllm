@@ -218,14 +218,14 @@ def _create_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
         model = AnthropicModel(api_model_id, provider=AnthropicProvider(api_key=api_key))
 
     elif provider == "openai":
-        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise EnvironmentError(
                 "OPENAI_API_KEY not set. Add it to your .env file to use OpenAI models."
             )
-        model = OpenAIModel(api_model_id, provider=OpenAIProvider(api_key=api_key))
+        model = OpenAIChatModel(api_model_id, provider=OpenAIProvider(api_key=api_key))
 
     elif provider == "groq":
         from pydantic_ai.models.groq import GroqModel

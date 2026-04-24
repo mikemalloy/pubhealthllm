@@ -43,6 +43,17 @@ from pubhealth_llm.decision_tree.formatter import (
     format_icer,
     format_path_label,
 )
+from pubhealth_llm.decision_tree.generator import generate_script
+from pubhealth_llm.decision_tree.runner import ScriptExecutionError, run_script
+from pubhealth_llm.decision_tree.schema import AnalysisConfig, StrategySchema
+from pubhealth_llm.decision_tree.elicitor import (
+    Complete,
+    Eliciting,
+    ElicitationOutput,
+    SYSTEM_PROMPT as ELICITOR_SYSTEM_PROMPT,
+    get_elicitor_agent,
+    run_elicitor,
+)
 
 __all__ = [
     # Simulation
@@ -63,4 +74,19 @@ __all__ = [
     "format_analysis",
     "format_icer",
     "format_path_label",
+    # Generator
+    "generate_script",
+    # Runner
+    "run_script",
+    "ScriptExecutionError",
+    # Schema
+    "StrategySchema",
+    "AnalysisConfig",
+    # Elicitor
+    "Eliciting",
+    "Complete",
+    "ElicitationOutput",
+    "ELICITOR_SYSTEM_PROMPT",
+    "get_elicitor_agent",
+    "run_elicitor",
 ]
