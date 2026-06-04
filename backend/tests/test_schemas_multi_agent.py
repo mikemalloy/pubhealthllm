@@ -10,7 +10,7 @@ from pubhealth_llm.app.schemas import ArtifactEnvelope, AskMeta, AskResponse, Pl
 # ---------------------------------------------------------------------------
 
 
-def test_plan_artifact_mode_requires_no_artifact_type():
+def test_plan_artifact_type_is_optional():
     """artifact_type is optional — can be None even in artifact mode."""
     p = Plan(
         intent="look up diabetes statistics",
@@ -53,6 +53,19 @@ def test_plan_confidence_rejects_below_zero():
             mode="chat",
             dispatch_target="responder",
             confidence=-0.1,
+        )
+
+
+def test_plan_mode_dispatch_target_must_be_compatible():
+    """mode='chat' with dispatch_target='reporter' must raise ValidationError."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Plan(
+            intent="x",
+            mode="chat",
+            dispatch_target="reporter",
+            confidence=0.5,
         )
 
 

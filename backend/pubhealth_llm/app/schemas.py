@@ -11,7 +11,7 @@ Usage:
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Supporting models
@@ -244,6 +244,18 @@ class Plan(BaseModel):
         description="Planner's confidence in this routing decision (0.0–1.0)",
     )
 
+    @model_validator(mode="after")
+    def _validate_mode_matches_target(self) -> "Plan":
+        chat_mode = self.mode == "chat"
+        responder_target = self.dispatch_target == "responder"
+        if chat_mode != responder_target:
+            raise ValueError(
+                f"mode='{self.mode}' is incompatible with dispatch_target='{self.dispatch_target}'. "
+                "Use mode='chat' with dispatch_target='responder', "
+                "or mode='artifact' with dispatch_target='reporter'."
+            )
+        return self
+
 
 class ArtifactEnvelope(BaseModel):
     """
@@ -254,8 +266,8 @@ class ArtifactEnvelope(BaseModel):
     — defined by future artifact renderers.
     """
 
-    type: str = Field(
-        description="Artifact sub-type: 'report', 'comparison', 'ranking', 'mortality'"
+    type: Literal["report", "comparison", "ranking", "mortality"] = Field(
+        description="Artifact sub-type"
     )
     title: str = Field(description="Short title shown in the artifact panel header")
     payload: dict = Field(description="Serialized artifact data")
@@ -270,7 +282,7 @@ class AskMeta(BaseModel):
         description="Tool names called during this request",
     )
     model: str = Field(description="Model(s) used, e.g. 'planner+reporter'")
-    timing_ms: int = Field(description="Wall-clock time from request to response")
+    timing_ms: int = Field(ge=0, description="Wall-clock time from request to response")
 
 
 class AskResponse(BaseModel):
@@ -292,6 +304,7 @@ class AskResponse(BaseModel):
         description="Render surface chosen by the planner"
     )
     chat_message: str = Field(
+        min_length=1,
         description="Always present. For chat: the full response. "
         "For artifact: a one-sentence teaser (first 200 chars of summary)."
     )
