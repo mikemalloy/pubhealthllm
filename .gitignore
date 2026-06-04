@@ -49,8 +49,12 @@ out/
 # Terraform state (contains sensitive data)
 terraform/*.tfstate
 terraform/*.tfstate.backup
+terraform/*.tfstate.*.backup
 terraform/.terraform/
 terraform/terraform.tfvars
+
+# Claude Code internals
+.claude/
 
 # Misc
 query_log.txt
