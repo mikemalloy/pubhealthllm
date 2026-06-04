@@ -1,0 +1,42 @@
+# backend/Dockerfile.railway
+# Railway deployment: build context is backend/ directory.
+# Do NOT use for AWS — use backend/Dockerfile (project-root context) for that.
+#
+# Key difference from Drug Discovery template:
+#   - No HuggingFace model download layer (no ML model to pull)
+#   - data/ directory is BAKED INTO the image (healthgpt.db + chroma_db)
+#     so there is zero cold-start download delay at runtime.
+#   - TODO: bump memory to 2-4 GB in Railway settings (sentence-transformers
+#     + ChromaDB need headroom; Drug Discovery used 3 GB for PyTorch).
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps for sentence-transformers / chromadb
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies (split layer for better caching)
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r /tmp/requirements.txt
+
+# Bake application source
+# TODO: update COPY list when new modules are added (e.g. rate_limiter.py)
+COPY server.py /app/
+
+# Bake engine package
+COPY pubhealth_llm/ /app/pubhealth_llm/
+
+# Bake data artifacts (healthgpt.db ~84MB, chroma_db ~3.3MB)
+# These are built once during ingestion and committed via Git LFS.
+# TODO: if data grows beyond ~500MB, move to a Railway volume mount instead.
+COPY data/ /app/data/
+
+EXPOSE 8000
+
+# TODO: increase --workers to 2 once memory budget is confirmed
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
