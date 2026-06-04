@@ -9,7 +9,7 @@ Usage:
     from pubhealth_llm.app.schemas import PublicHealthResponse
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -211,3 +211,92 @@ class ComparisonResult(BaseModel):
     measure: str
     rows: list[HealthStatResult]
     summary: str = Field(description="Plain-language summary of the comparison")
+
+
+# ---------------------------------------------------------------------------
+# Multi-agent routing schemas (planner → responder / reporter)
+# ---------------------------------------------------------------------------
+
+
+class Plan(BaseModel):
+    """
+    Routing decision produced by the planner agent.
+
+    The planner classifies the incoming question and chooses where to send it:
+      - mode="chat"     → responder (conversational path)
+      - mode="artifact" → run_agent reporter (structured report path)
+    """
+
+    intent: str = Field(description="One-phrase description of the user's intent")
+    mode: Literal["chat", "artifact"] = Field(
+        description="Render surface: 'chat' for conversational, 'artifact' for reports"
+    )
+    artifact_type: Optional[Literal["report", "comparison", "ranking", "mortality"]] = Field(
+        None,
+        description="Artifact sub-type when mode='artifact'. None is valid.",
+    )
+    dispatch_target: Literal["responder", "reporter"] = Field(
+        description="'responder' for chat path, 'reporter' for full structured report"
+    )
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Planner's confidence in this routing decision (0.0–1.0)",
+    )
+
+
+class ArtifactEnvelope(BaseModel):
+    """
+    Wraps a structured artifact for the frontend artifact panel.
+
+    For type='report', payload is a serialized PublicHealthResponse (model_dump()).
+    Other types (comparison, ranking, mortality) carry their own payload shapes
+    — defined by future artifact renderers.
+    """
+
+    type: str = Field(
+        description="Artifact sub-type: 'report', 'comparison', 'ranking', 'mortality'"
+    )
+    title: str = Field(description="Short title shown in the artifact panel header")
+    payload: dict = Field(description="Serialized artifact data")
+
+
+class AskMeta(BaseModel):
+    """Execution metadata attached to every AskResponse."""
+
+    intent: str = Field(description="Classified intent string from the planner")
+    tools_used: list[str] = Field(
+        default_factory=list,
+        description="Tool names called during this request",
+    )
+    model: str = Field(description="Model(s) used, e.g. 'planner+reporter'")
+    timing_ms: int = Field(description="Wall-clock time from request to response")
+
+
+class AskResponse(BaseModel):
+    """
+    Envelope returned by run_ask() — the /ask contract.
+
+    chat_message is always present. artifact is present only when mode='artifact'.
+
+    Wire format (JSON):
+        {
+          "mode": "chat" | "artifact",
+          "chat_message": "...",
+          "artifact": { "type": "...", "title": "...", "payload": {...} } | null,
+          "meta": { "intent": "...", "tools_used": [], "model": "...", "timing_ms": 0 }
+        }
+    """
+
+    mode: Literal["chat", "artifact"] = Field(
+        description="Render surface chosen by the planner"
+    )
+    chat_message: str = Field(
+        description="Always present. For chat: the full response. "
+        "For artifact: a one-sentence teaser (first 200 chars of summary)."
+    )
+    artifact: Optional[ArtifactEnvelope] = Field(
+        None,
+        description="Present when mode='artifact', null when mode='chat'",
+    )
+    meta: AskMeta
