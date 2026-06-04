@@ -1,0 +1,59 @@
+# Secrets
+.env
+*.env.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.pyd
+*.so
+*.dll
+*.dylib
+
+# Large data files (baked into Docker image, not committed)
+backend/data/healthpub.db
+backend/data/cdc_places_raw.csv
+backend/data/cdc_places_county_raw.csv
+backend/data/cdc_mortality_raw.csv
+
+# DB and vector store tracked via Git LFS (see .gitattributes)
+# If LFS unavailable, uncomment to exclude entirely:
+# backend/data/healthgpt.db
+# backend/data/chroma_db/
+
+# Node / frontend (future)
+node_modules/
+.next/
+out/
+
+# macOS
+.DS_Store
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Terraform state (contains sensitive data)
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform/
+terraform/terraform.tfvars
+
+# Misc
+query_log.txt
+*.log
+wandb/
+.ipynb_checkpoints/
