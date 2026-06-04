@@ -63,7 +63,12 @@ _planner_agent: Optional[Agent] = None
 
 
 def _get_planner() -> Agent:
-    """Return the planner agent, creating it once on first call."""
+    """Return the planner agent, creating it once on first call.
+
+    Thread safety note: the check-then-set is safe in asyncio (single-threaded
+    event loop, no preemption between the None check and assignment). If this
+    module is ever used in a multi-threaded context, add a threading.Lock.
+    """
     global _planner_agent
     if _planner_agent is None:
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -100,6 +105,9 @@ async def plan_request(question: str) -> Plan:
         agent = _get_planner()
         result = await agent.run(question)
         return result.output
+    except EnvironmentError as exc:
+        logger.error("Planner configuration error — missing API key: %s", exc)
+        return _FALLBACK_PLAN.model_copy()
     except Exception as exc:
         logger.warning("Planner failed (%s), using fallback plan", exc)
-        return _FALLBACK_PLAN
+        return _FALLBACK_PLAN.model_copy()

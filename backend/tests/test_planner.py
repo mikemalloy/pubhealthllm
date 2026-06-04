@@ -72,3 +72,14 @@ async def test_plan_request_returns_plan_instance():
         plan = await plan_request("Rank counties by obesity in Texas")
 
     assert isinstance(plan, Plan)
+
+
+async def test_plan_request_falls_back_on_env_error():
+    """EnvironmentError (missing API key) is caught and returns fallback."""
+    mock_agent_factory = MagicMock(side_effect=EnvironmentError("ANTHROPIC_API_KEY not set"))
+
+    with patch("pubhealth_llm.app.planner._get_planner", mock_agent_factory):
+        plan = await plan_request("Any question")
+
+    assert plan.dispatch_target == "reporter"
+    assert plan.confidence == 0.0
