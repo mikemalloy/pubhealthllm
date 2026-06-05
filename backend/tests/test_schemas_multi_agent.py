@@ -123,3 +123,25 @@ def test_ask_response_chat_message_always_present():
     )
     assert isinstance(r.chat_message, str)
     assert len(r.chat_message) > 0
+
+
+def test_ask_response_artifact_mode_rejects_missing_artifact():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        AskResponse(
+            mode="artifact",
+            chat_message="Teaser",
+            artifact=None,
+            meta=AskMeta(intent="x", tools_used=[], model="m", timing_ms=0),
+        )
+
+
+def test_ask_response_chat_mode_rejects_artifact_present():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        AskResponse(
+            mode="chat",
+            chat_message="Response",
+            artifact=ArtifactEnvelope(type="report", title="t", payload={}),
+            meta=AskMeta(intent="x", tools_used=[], model="m", timing_ms=0),
+        )

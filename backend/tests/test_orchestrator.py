@@ -214,6 +214,29 @@ async def test_run_ask_forwards_message_history_to_run_agent():
     run_agent_mock.assert_called_once_with("Follow-up question", message_history=history)
 
 
+async def test_run_ask_falls_back_to_reporter_on_responder_error():
+    """If responder fails, orchestrator falls back to the reporter path."""
+    with (
+        patch(
+            "pubhealth_llm.app.orchestrator.plan_request",
+            new=AsyncMock(return_value=_CHAT_PLAN),
+        ),
+        patch(
+            "pubhealth_llm.app.orchestrator.run_responder",
+            new=AsyncMock(side_effect=RuntimeError("LLM down")),
+        ),
+        patch(
+            "pubhealth_llm.app.orchestrator.run_agent",
+            new=AsyncMock(return_value=_MINIMAL_PHR),
+        ),
+    ):
+        response = await run_ask("What can you do?")
+
+    # Falls back to artifact mode via reporter
+    assert response.mode == "artifact"
+    assert response.artifact is not None
+
+
 async def test_run_ask_artifact_teaser_truncates_long_summary():
     """chat_message in artifact mode is truncated to 200 chars + ellipsis."""
     long_summary = "A" * 300  # well over _TEASER_LENGTH

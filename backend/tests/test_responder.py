@@ -27,7 +27,7 @@ async def test_run_responder_returns_string():
 async def test_run_responder_passes_question_to_agent():
     captured = {}
 
-    async def capture_run(question):
+    async def capture_run(question, message_history=None):
         captured["question"] = question
         result = MagicMock()
         result.output = "Response"
@@ -40,6 +40,24 @@ async def test_run_responder_passes_question_to_agent():
         await run_responder("How do I use this tool?")
 
     assert captured["question"] == "How do I use this tool?"
+
+
+async def test_run_responder_forwards_message_history():
+    captured = {}
+
+    async def capture_run(question, message_history=None):
+        captured["message_history"] = message_history
+        result = MagicMock()
+        result.output = "Response"
+        return result
+
+    mock_agent = MagicMock()
+    mock_agent.run = AsyncMock(side_effect=capture_run)
+
+    with patch("pubhealth_llm.app.responder._get_responder", return_value=mock_agent):
+        await run_responder("How do I use this?", message_history=[{"role": "user", "content": "hi"}])
+
+    assert captured["message_history"] == [{"role": "user", "content": "hi"}]
 
 
 async def test_run_responder_returns_output_as_str():

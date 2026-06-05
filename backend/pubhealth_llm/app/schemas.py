@@ -313,3 +313,11 @@ class AskResponse(BaseModel):
         description="Present when mode='artifact', null when mode='chat'",
     )
     meta: AskMeta
+
+    @model_validator(mode="after")
+    def _validate_artifact_presence(self) -> "AskResponse":
+        if self.mode == "artifact" and self.artifact is None:
+            raise ValueError("artifact must be present when mode='artifact'")
+        if self.mode == "chat" and self.artifact is not None:
+            raise ValueError("artifact must be None when mode='chat'")
+        return self

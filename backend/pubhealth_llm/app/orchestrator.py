@@ -53,19 +53,25 @@ async def run_ask(
     plan = await plan_request(question)
 
     if plan.mode == "chat":
-        chat_message = await run_responder(question)
-        timing_ms = int(time.monotonic() * 1000) - start_ms
-        return AskResponse(
-            mode="chat",
-            chat_message=chat_message,
-            artifact=None,
-            meta=AskMeta(
-                intent=plan.intent,
-                tools_used=[],
-                model="planner+responder",
-                timing_ms=timing_ms,
-            ),
-        )
+        try:
+            chat_message = await run_responder(question, message_history=message_history)
+            timing_ms = int(time.monotonic() * 1000) - start_ms
+            return AskResponse(
+                mode="chat",
+                chat_message=chat_message,
+                artifact=None,
+                meta=AskMeta(
+                    intent=plan.intent,
+                    tools_used=[],  # TODO: populate from agent result.all_messages() in a follow-up
+                    model="planner+responder",
+                    timing_ms=timing_ms,
+                ),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Responder failed (%s), falling back to reporter", exc
+            )
+            # Fall through to artifact/reporter path below
 
     # artifact path — full reporter
     pub_health_response = await run_agent(question, message_history=message_history)
@@ -84,7 +90,7 @@ async def run_ask(
         ),
         meta=AskMeta(
             intent=plan.intent,
-            tools_used=[],
+            tools_used=[],  # TODO: populate from agent result.all_messages() in a follow-up
             model="planner+reporter",
             timing_ms=timing_ms,
         ),

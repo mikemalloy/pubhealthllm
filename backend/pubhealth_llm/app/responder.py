@@ -67,12 +67,13 @@ def _get_responder() -> Agent:
     return _responder_agent
 
 
-async def run_responder(question: str) -> str:
+async def run_responder(question: str, message_history: Optional[list] = None) -> str:
     """
     Run the responder agent on a conversational question.
 
     Args:
-        question: The user's question (routed here by the planner).
+        question:        The user's question (routed here by the planner).
+        message_history: Optional prior conversation turns for context.
 
     Returns:
         Plain text response string.
@@ -82,5 +83,5 @@ async def run_responder(question: str) -> str:
                    The orchestrator should catch and fall back to the reporter.
     """
     agent = _get_responder()
-    result = await agent.run(question)
+    result = await agent.run(question, message_history=message_history or [])
     return str(result.output)
