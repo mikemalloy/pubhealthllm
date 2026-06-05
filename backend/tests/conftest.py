@@ -117,3 +117,38 @@ def compare_tool():
     """
     from pubhealth_llm.app.tools import compare_mortality
     return compare_mortality
+
+
+# ---------------------------------------------------------------------------
+# HTTP / auth fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def override_clerk_guard():
+    """
+    Override the Clerk auth guard for every test via FastAPI dependency_overrides.
+
+    This makes all protected routes behave as if the user is authenticated,
+    without a real Clerk token. The override is always cleaned up after the
+    test, even on failure.
+
+    Why autouse: every test that exercises the FastAPI app should get clean
+    auth behavior. Tests that don't import server are unaffected (the import
+    inside the fixture is deferred and cheap once server is cached).
+
+    To test the *unauthenticated* path in a specific test:
+        def test_401(override_clerk_guard):
+            app.dependency_overrides.pop(clerk_guard)
+            # ... make request, assert 401 ...
+    """
+    try:
+        from server import app, clerk_guard
+        app.dependency_overrides[clerk_guard] = lambda: {"sub": "test-user-id"}
+        yield
+    finally:
+        try:
+            from server import app, clerk_guard
+            app.dependency_overrides.pop(clerk_guard, None)
+        except ImportError:
+            pass

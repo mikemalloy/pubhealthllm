@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase B, item B0 (not started).
+**You are here →** Phase B, item B1 (not started).
 
 ---
 
@@ -52,7 +52,7 @@ Goal: `run_ask` makes exactly **one** LLM call and derives mode from the payload
 Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the deferred
 `/ask` session from CLAUDE.md rule 4.
 
-- [ ] **B0. conftest auth fixture FIRST** (CLAUDE.md known concern). Add an
+- [x] **B0. conftest auth fixture FIRST** (CLAUDE.md known concern). Add an
       autouse fixture overriding `clerk_guard` via `app.dependency_overrides`
       before adding any guarded route.
 - [ ] **B1. `POST /ask`.** Add `AskRequest` model (question + optional
@@ -81,6 +81,9 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-05 — Phase B0 complete. clerk_guard lazy-init in server.py;
+  autouse override_clerk_guard fixture in conftest.py; fragile ClerkHTTPBearer
+  patch removed from test_health.py. Suite green and offline.
 - 2026-06-05 — Phase A complete. run_ask makes one LLM call; mode derived
   from payload heuristic (_is_report_worthy). planner.py + responder.py
   parked (not deleted). All tests green offline.

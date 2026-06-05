@@ -2,22 +2,17 @@
 Tests for GET /health.
 
 The health endpoint is public (no auth), returns 200 with a small
-JSON status payload. Clerk guard is wired at startup but does not
-protect this route.
+JSON status payload. The Clerk guard does not protect this route.
 """
-
 import pytest
-from unittest.mock import patch
+from fastapi.testclient import TestClient
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def client():
-    # Patch Clerk guard init to avoid needing a live JWKS URL in tests
-    with patch("server.ClerkHTTPBearer") as mock_guard:
-        mock_guard.return_value = lambda: None
-        from fastapi.testclient import TestClient
-        from server import app
-        return TestClient(app)
+    """HTTP test client. Clerk guard is overridden by the conftest autouse fixture."""
+    from server import app
+    return TestClient(app)
 
 
 def test_health_returns_200(client):

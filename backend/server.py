@@ -1,7 +1,8 @@
 import os
 from pathlib import Path
+from typing import Any, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
 
@@ -18,15 +19,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Clerk guard — wired at startup, applied to no routes yet.
-# Add Depends(clerk_guard) to /ask and /measures when those are built.
-clerk_config = ClerkConfig(
-    jwks_url=os.getenv(
-        "CLERK_JWKS_URL",
-        "https://placeholder.clerk.invalid/.well-known/jwks.json",
-    )
-)
-clerk_guard = ClerkHTTPBearer(clerk_config)
+# ---------------------------------------------------------------------------
+# Clerk auth guard — lazy init so tests can override via dependency_overrides
+# ---------------------------------------------------------------------------
+
+_clerk_bearer: Optional[ClerkHTTPBearer] = None
+
+
+def _get_clerk_bearer() -> ClerkHTTPBearer:
+    """Return the ClerkHTTPBearer singleton, creating it on first call.
+
+    Lazy so that importing server in tests never triggers a JWKS fetch.
+    Set CLERK_JWKS_URL to the real endpoint in production.
+    """
+    global _clerk_bearer
+    if _clerk_bearer is None:
+        jwks_url = os.getenv(
+            "CLERK_JWKS_URL",
+            "https://placeholder.clerk.invalid/.well-known/jwks.json",
+        )
+        _clerk_bearer = ClerkHTTPBearer(ClerkConfig(jwks_url=jwks_url))
+    return _clerk_bearer
+
+
+async def clerk_guard(request: Request) -> Any:
+    """
+    FastAPI dependency for Clerk authentication.
+
+    Usage:  @app.post("/ask")
+            async def ask(payload=Depends(clerk_guard)): ...
+
+    Override in tests:
+        app.dependency_overrides[clerk_guard] = lambda: {"sub": "test-user"}
+    """
+    return await _get_clerk_bearer()(request)
+
 
 _DATA_DIR = Path(__file__).parent / "data"
 
