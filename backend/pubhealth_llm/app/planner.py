@@ -6,10 +6,12 @@ The planner is a cheap, fast Haiku agent with structured output.
 Its ONLY job is classification + routing — it never answers the question.
 
 Public API:
-    plan = await plan_request("What is the diabetes rate in Travis County?")
+    plan = await make_plan("What is the diabetes rate in Travis County?")
     # plan.mode        → "artifact"
     # plan.intent      → "diabetes statistics query"
     # plan.reason      → "named county + disease keyword"
+
+    plan_request is an alias for make_plan (backward compat).
 """
 
 import logging
@@ -41,6 +43,11 @@ ROUTE TO REPORTER (mode=artifact) when:
 - The user asks about historical outbreaks, MMWR data, or disease trends
 - The question can only be answered by querying data
 
+ROUTE TO REPORTER with artifact_type=decision_tree when:
+- The user asks about cost-effectiveness analysis
+- The user asks for a decision tree or intervention analysis
+- The user asks "is it worth it to..." type questions about health interventions
+
 ROUTE TO RESPONDER (mode=chat) when:
 - The user asks "what can you do?" or "how do I use this?"
 - The user asks a purely definitional question (no data needed)
@@ -49,7 +56,9 @@ ROUTE TO RESPONDER (mode=chat) when:
 
 Fields to set:
 - mode: "artifact" for data questions, "chat" for conversational questions
-- artifact_type: "report" for most data questions; null for chat
+- artifact_type: "report" for most data questions; "ranking" for ranking requests;
+  "comparison" for multi-jurisdiction comparisons; "decision_tree" for
+  cost-effectiveness/intervention analysis; null for chat
 - intent: one-phrase description of what the user wants
 - reason: brief explanation of your routing decision (1 sentence, for debugging)
 """
@@ -57,8 +66,8 @@ Fields to set:
 _FALLBACK_PLAN = Plan(
     mode="artifact",
     artifact_type=ArtifactType.report,
-    intent="unknown — planner error, defaulting to reporter",
-    reason="fallback: planner raised an exception",
+    intent="fallback",
+    reason="planner_error_or_low_confidence",
 )
 
 _planner_agent: Optional[Agent] = None
@@ -90,7 +99,7 @@ def _get_planner() -> Agent:
     return _planner_agent
 
 
-async def plan_request(question: str) -> Plan:
+async def make_plan(question: str, message_history: Optional[list] = None) -> Plan:
     """
     Classify the user's question and return a routing Plan.
 
@@ -99,6 +108,9 @@ async def plan_request(question: str) -> Plan:
 
     Args:
         question: The user's raw question string.
+        message_history: Optional prior conversation turns. Accepted for API
+            compatibility but not forwarded to the LLM — the planner only
+            needs the current question for classification.
 
     Returns:
         Plan with mode, artifact_type, intent, and reason.
@@ -113,3 +125,8 @@ async def plan_request(question: str) -> Plan:
     except Exception as exc:
         logger.warning("Planner failed (%s), using fallback plan", exc)
         return _FALLBACK_PLAN.model_copy()
+
+
+# Backward-compat alias — make_plan accepts an optional message_history param
+# with a default, so existing callers using plan_request(question) still work.
+plan_request = make_plan
