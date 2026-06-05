@@ -57,22 +57,22 @@ def test_public_health_response_to_markdown(anthropic_api_key):
 
 def test_agent_instantiates(anthropic_api_key):
     """
-    The real _create_agent() function builds the agent without error.
+    The real _build_agent() function builds the agent without error.
 
     This exercises AnthropicProvider(api_key=...) + AnthropicModel +
     Agent(output_type=...) together, catching any API renames in one shot.
     """
-    from pubhealth_llm.app.agent import _create_agent
+    from pubhealth_llm.app.agent import _build_agent
 
-    agent = _create_agent()
+    agent = _build_agent("anthropic:claude-sonnet-4-6")
     assert agent is not None
 
 
 def test_agent_has_eight_tools(anthropic_api_key):
     """The agent must expose exactly the eight documented tools."""
-    from pubhealth_llm.app.agent import _create_agent
+    from pubhealth_llm.app.agent import _build_agent
 
-    agent = _create_agent()
+    agent = _build_agent("anthropic:claude-sonnet-4-6")
     # In PydanticAI 1.x, registered tools live in _function_toolset.tools (dict)
     tool_names = set(agent._function_toolset.tools.keys())
     expected = {

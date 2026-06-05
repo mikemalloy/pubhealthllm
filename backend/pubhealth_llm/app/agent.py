@@ -5,10 +5,10 @@ This module creates and configures the main agent that:
   1. Receives a natural language question from a public health professional
   2. Decides which combination of tools to call (MMWR search, SQL queries)
   3. Synthesizes the tool outputs into a structured PublicHealthResponse
-  4. Returns the response to the Gradio interface
+  4. Returns the response to the FastAPI interface
 
-The agent uses Anthropic's claude-sonnet-4-5 model via PydanticAI's
-Anthropic provider integration.
+Model selection is controlled by the PUBHEALTH_MODEL environment variable
+(see pubhealth_llm.app.config).  Supported providers: anthropic, openai.
 
 Usage:
     from pubhealth_llm.app.agent import run_agent
@@ -24,6 +24,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
+from pubhealth_llm.app.config import get_model
 from pubhealth_llm.app.schemas import PublicHealthResponse
 from pubhealth_llm.app.tools import (
     compare_locations,
@@ -45,24 +46,6 @@ load_dotenv()
 LOG_FILE = "query_log.txt"
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Model registry
-# ---------------------------------------------------------------------------
-
-# Maps dropdown key → (provider, actual API model ID)
-_MODEL_MAP: dict[str, tuple[str, str]] = {
-    "anthropic:claude-sonnet-4-6":      ("anthropic", "claude-sonnet-4-6"),
-    "anthropic:claude-haiku-4":         ("anthropic", "claude-haiku-4-5-20251001"),
-    "openai:gpt-4o-mini":               ("openai",    "gpt-4o-mini"),
-    "groq:llama-3.3-70b-versatile":     ("groq",      "llama-3.3-70b-versatile"),
-    "groq:llama-3.1-8b-instant":        ("groq",      "llama-3.1-8b-instant"),
-}
-
-DEFAULT_MODEL_KEY = "anthropic:claude-sonnet-4-6"
-
-# Per-model agent cache — agents are heavyweight; create each once
-_agent_cache: dict[str, Agent] = {}
 
 # ---------------------------------------------------------------------------
 # System prompt
@@ -149,65 +132,32 @@ beyond prevalence — death rates are the most compelling data point in budget
 arguments.
 """
 
-# Condensed prompt for Groq models — same tool-routing rules, no verbose
-# writing instructions.  Groq free tier caps at 12,000 TPM; the full prompt
-# plus 8 tool definitions pushes requests over that limit.
-SYSTEM_PROMPT_GROQ = """
-You are pubHealthLLM, a public health decision support assistant.
-Answer questions using CDC MMWR surveillance reports and CDC PLACES county-level
-health statistics. Always call tools — never fabricate statistics.
-
-## TOOL SELECTION
-
-- Named location stats (county/state): tool_get_health_statistics
-- Worst counties for ONE measure: tool_get_worst_counties_by_measure
-- Comparing named locations: tool_compare_locations
-- Outbreak history or disease trends: tool_search_mmwr_reports
-- Unclear what measures exist: tool_get_available_measures first
-- Combined burden across 2+ measures: tool_rank_counties_composite (call ONCE)
-- Death rates / leading causes / mortality comparisons: tool_get_mortality_data or tool_compare_mortality
-
-For multi-measure prioritization use tool_rank_counties_composite with all
-measures in one call — do NOT substitute repeated tool_get_worst_counties_by_measure calls.
-
-## ALWAYS
-- Cite exact values and collection year
-- Note confidence intervals where available
-- Acknowledge data limitations (survey-based, may lag 1-2 years)
-- Every response must include a disclaimer that outputs are decision support only
-  and require validation by qualified public health professionals
-"""
-
 # ---------------------------------------------------------------------------
-# Agent setup
+# Agent factory
 # ---------------------------------------------------------------------------
 
 
-def _create_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
-    """
-    Instantiate and configure the PydanticAI agent with all tools.
-
-    Creates an agent for the given model key (e.g. "anthropic:claude-sonnet-4-6").
-    Results are cached in _agent_cache — this function is called at most once
-    per unique model key.
+def _build_agent(model_str: str) -> Agent:
+    """Build a PydanticAI agent for the given provider:model string.
 
     Args:
-        model_key: One of the keys defined in _MODEL_MAP.
+        model_str: A string in the form "provider:model-id", e.g.
+                   "anthropic:claude-sonnet-4-6" or "openai:gpt-4o-mini".
 
     Returns:
-        Configured PydanticAI Agent instance.
+        Configured PydanticAI Agent with all eight tools registered.
 
     Raises:
+        ValueError:       If model_str is not in "provider:model-id" format,
+                          or if the provider is not supported.
         EnvironmentError: If the required API key for the provider is not set.
-        ValueError:       If model_key is not in _MODEL_MAP.
     """
-    if model_key not in _MODEL_MAP:
+    parts = model_str.split(":", 1)
+    if len(parts) != 2:
         raise ValueError(
-            f"Unknown model key {model_key!r}. "
-            f"Valid options: {list(_MODEL_MAP)}"
+            f"Invalid model string {model_str!r}. Expected 'provider:model-id'."
         )
-
-    provider, api_model_id = _MODEL_MAP[model_key]
+    provider, api_model_id = parts
 
     if provider == "anthropic":
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -220,6 +170,7 @@ def _create_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
     elif provider == "openai":
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
+
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise EnvironmentError(
@@ -227,27 +178,16 @@ def _create_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
             )
         model = OpenAIChatModel(api_model_id, provider=OpenAIProvider(api_key=api_key))
 
-    elif provider == "groq":
-        from pydantic_ai.models.groq import GroqModel
-        from pydantic_ai.providers.groq import GroqProvider
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise EnvironmentError(
-                "GROQ_API_KEY not set. Add it to your .env file to use Groq models."
-            )
-        model = GroqModel(api_model_id, provider=GroqProvider(api_key=api_key))
-
     else:
-        raise ValueError(f"Unknown provider {provider!r} in model key {model_key!r}")
-
-    # Groq free tier: 12,000 TPM limit. Use the condensed prompt to keep
-    # requests under the limit. Anthropic models use the full rich prompt.
-    system_prompt = SYSTEM_PROMPT_GROQ if provider == "groq" else SYSTEM_PROMPT
+        raise ValueError(
+            f"Provider {provider!r} is not supported. "
+            f"Set PUBHEALTH_MODEL to 'anthropic:<model>' or 'openai:<model>'."
+        )
 
     agent: Agent[None, PublicHealthResponse] = Agent(
         model=model,
         output_type=PublicHealthResponse,
-        system_prompt=system_prompt,
+        system_prompt=SYSTEM_PROMPT,
     )
 
     # -----------------------------------------------------------------------
@@ -400,24 +340,6 @@ def _create_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
     return agent
 
 
-def get_agent(model_key: str = DEFAULT_MODEL_KEY) -> Agent:
-    """
-    Return a cached agent for the given model key, creating it if needed.
-
-    Lazy initialization means importing this module never triggers an API
-    key check — useful for testing tools.py independently.
-
-    Args:
-        model_key: One of the keys defined in _MODEL_MAP.
-
-    Returns:
-        The configured PydanticAI Agent for that model.
-    """
-    if model_key not in _agent_cache:
-        _agent_cache[model_key] = _create_agent(model_key)
-    return _agent_cache[model_key]
-
-
 # ---------------------------------------------------------------------------
 # Query logging
 # ---------------------------------------------------------------------------
@@ -455,7 +377,7 @@ async def run_agent(
     """
     Run the pubHealthLLM agent on a user question.
 
-    This is the primary entry point called by the Gradio interface.
+    This is the primary entry point called by the FastAPI interface.
     It runs the PydanticAI agent, which calls tools as needed and
     returns a structured PublicHealthResponse.
 
@@ -463,8 +385,9 @@ async def run_agent(
         question:        The user's natural language question.
         message_history: Optional list of prior conversation messages
                          for multi-turn context.
-        model:           Model key from _MODEL_MAP (e.g. "anthropic:claude-sonnet-4-6").
-                         Defaults to DEFAULT_MODEL_KEY if not provided.
+        model:           Provider:model-id string (e.g. "anthropic:claude-sonnet-4-6").
+                         Defaults to the value of PUBHEALTH_MODEL env var, or
+                         "anthropic:claude-sonnet-4-6" if that var is unset.
 
     Returns:
         A validated PublicHealthResponse with summary, evidence,
@@ -472,11 +395,11 @@ async def run_agent(
 
     Raises:
         Exception: Propagated from PydanticAI on fatal errors.
-                   The Gradio layer catches these and shows a user message.
+                   The FastAPI layer catches these and shows a user message.
     """
-    model_key = model or DEFAULT_MODEL_KEY
-    agent = get_agent(model_key)
-    logger.info("Running agent (model=%r) for question: %r", model_key, question)
+    model_str = model if model is not None else get_model()
+    agent = _build_agent(model_str)
+    logger.info("Running agent (model=%r) for question: %r", model_str, question)
 
     try:
         result = await agent.run(
