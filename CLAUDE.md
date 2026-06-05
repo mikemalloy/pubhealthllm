@@ -2,6 +2,12 @@
 
 ## Non-negotiable rules
 
+0. **Track progress in `PROGRESS.md`.** Before any work, read `PROGRESS.md` and
+   resume from the "You are here" marker. Before stopping, update its checkboxes,
+   move the marker, add a session-log line, and commit it
+   (`git add PROGRESS.md && git commit`). The commit is what makes the state
+   survive a dead session — commit `PROGRESS.md` even if nothing else is ready.
+
 1. **TDD always.** Write the failing test first. Red → green → refactor.
    No production code without a failing test that demanded it.
 

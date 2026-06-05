@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 # Characters of the reporter summary to surface as chat_message teaser
 _TEASER_LENGTH = 200
 
+# Characters of the reporter summary to use in artifact title
+_TITLE_LENGTH = 80
+
 
 def _is_report_worthy(resp: PublicHealthResponse) -> bool:
     """Return True when resp.statistics is non-empty.
@@ -97,8 +100,8 @@ async def run_ask(
 
     if _is_report_worthy(result):
         summary = result.summary
-        teaser = summary[:_TEASER_LENGTH] + "…" if len(summary) > _TEASER_LENGTH else summary
-        title = summary[:80].rstrip() if len(summary) > 80 else summary
+        teaser = (summary[:_TEASER_LENGTH] + "…" if len(summary) > _TEASER_LENGTH else summary) or "No summary available."
+        title = (summary[:_TITLE_LENGTH].rstrip() if len(summary) > _TITLE_LENGTH else summary) or "No summary available."
         return AskResponse(
             mode="artifact",
             chat_message=teaser,
@@ -117,7 +120,7 @@ async def run_ask(
     else:
         return AskResponse(
             mode="chat",
-            chat_message=result.summary,
+            chat_message=result.summary or "No data summary available for this query.",
             artifact=None,
             meta=Meta(
                 intent=question[:200],
