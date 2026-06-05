@@ -253,7 +253,7 @@ class Meta(BaseModel):
 
     intent: str = Field(description="Classified intent from the planner")
     tools_used: list[str] = Field(
-        default=[],
+        default_factory=list,
         description="Tool names called during this request",
     )
     model: str = Field(default="", description="Model(s) used, e.g. 'planner+reporter'")
@@ -320,3 +320,12 @@ class Plan(BaseModel):
     )
     intent: str = Field(description="One-phrase description of the user's intent")
     reason: str = Field(description="Short explanation of routing decision, for debugging/audit")
+
+    @model_validator(mode="after")
+    def _validate_artifact_type_requires_artifact_mode(self) -> "Plan":
+        if self.mode == "chat" and self.artifact_type is not None:
+            raise ValueError(
+                "artifact_type must be None when mode='chat'. "
+                f"Got artifact_type={self.artifact_type!r}."
+            )
+        return self

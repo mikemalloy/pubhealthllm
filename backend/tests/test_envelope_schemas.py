@@ -107,6 +107,17 @@ def test_plan_artifact_type_defaults_to_none():
     assert p.artifact_type is None
 
 
+def test_plan_chat_mode_rejects_artifact_type():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        Plan(
+            mode="chat",
+            artifact_type=ArtifactType.report,
+            intent="x",
+            reason="should fail",
+        )
+
+
 # ---------------------------------------------------------------------------
 # AskResponse — model validator
 # ---------------------------------------------------------------------------
