@@ -512,6 +512,53 @@ def get_available_measures(category: Optional[str] = None) -> str:
     return "\n".join(lines)
 
 
+def list_available_measures(category: str | None = None) -> list[dict]:
+    """
+    Return structured measure data for UI autocomplete / API consumers.
+
+    Unlike get_available_measures(), this function returns raw dicts instead
+    of a formatted string. It is the data source for the GET /measures endpoint.
+
+    Args:
+        category: Optional filter string (case-insensitive, partial match).
+                  Pass None to return all measures.
+
+    Returns:
+        List of dicts with keys: measure_id, measure, short_text, category.
+        Returns an empty list if the DB is absent or no rows match.
+    """
+    if not DB_PATH.exists():
+        return []
+
+    if category:
+        sql = f"""
+            SELECT DISTINCT MeasureId, Measure, Short_Question_Text, Category
+            FROM {TABLE_COUNTY}
+            WHERE Category LIKE ?
+              AND MeasureId IS NOT NULL
+            ORDER BY Category, Measure
+        """
+        rows = _query_db(sql, (f"%{category}%",))
+    else:
+        sql = f"""
+            SELECT DISTINCT MeasureId, Measure, Short_Question_Text, Category
+            FROM {TABLE_COUNTY}
+            WHERE MeasureId IS NOT NULL
+            ORDER BY Category, Measure
+        """
+        rows = _query_db(sql)
+
+    return [
+        {
+            "measure_id": row["MeasureId"],
+            "measure": row["Measure"],
+            "short_text": row["Short_Question_Text"],
+            "category": row["Category"],
+        }
+        for row in rows
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Tool: get_worst_counties_by_measure
 # ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase B, item B2 (not started).
+**You are here →** Phase B, item B3 (not started).
 
 ---
 
@@ -58,7 +58,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 - [x] **B1. `POST /ask`.** Add `AskRequest` model (question + optional
       `message_history`). Handler: `await run_ask(...)` → return `AskResponse`.
       `Depends(clerk_guard)`.
-- [ ] **B2. `GET /measures`.** Wrap `get_available_measures()`; return structured
+- [x] **B2. `GET /measures`.** Wrap `get_available_measures()`; return structured
       JSON (not the formatted string). `Depends(clerk_guard)`.
 - [ ] **B3. Apply auth + real config.** `Depends(clerk_guard)` on `/ask` +
       `/measures`; `/health` stays public; set real `CLERK_JWKS_URL`.
@@ -81,6 +81,9 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-05 — Phase B2 complete. GET /measures returns structured JSON;
+  list_available_measures() added to tools.py; MeasureItem model in
+  schemas.py. 11 new tests, all green offline.
 - 2026-06-05 — Phase B1 complete. POST /ask wired to run_ask; AskRequest
   added to schemas.py; conftest autouse handles auth. 11 new tests, all
   green offline.

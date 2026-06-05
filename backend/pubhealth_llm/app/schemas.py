@@ -347,3 +347,12 @@ class AskRequest(BaseModel):
         None,
         description="Optional list of prior conversation turns for multi-turn context.",
     )
+
+
+class MeasureItem(BaseModel):
+    """A single CDC PLACES health measure, returned by GET /measures."""
+
+    measure_id: str = Field(description="CDC PLACES MeasureId (e.g. 'DIABETES')")
+    measure: str = Field(description="Full measure name")
+    short_text: str = Field(description="Short human-readable label for UI display")
+    category: str = Field(description="CDC PLACES category (e.g. 'Chronic Disease')")

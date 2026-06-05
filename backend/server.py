@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
 
 from pubhealth_llm.app.orchestrator import run_ask
-from pubhealth_llm.app.schemas import AskRequest, AskResponse
+from pubhealth_llm.app.schemas import AskRequest, AskResponse, MeasureItem
+from pubhealth_llm.app.tools import list_available_measures
 
 app = FastAPI(title="pubHealthLLM API", version="0.1.0")
 
@@ -85,3 +86,20 @@ async def ask(req: AskRequest, _: Any = Depends(clerk_guard)) -> AskResponse:
     Requires: valid Clerk JWT in Authorization header.
     """
     return await run_ask(req.question, req.message_history)
+
+
+@app.get("/measures", response_model=list[MeasureItem])
+def measures(
+    category: str | None = None,
+    _: Any = Depends(clerk_guard),
+) -> list[MeasureItem]:
+    """
+    List available CDC PLACES health measures for UI autocomplete.
+
+    Args:
+        category: Optional category filter (partial match, case-insensitive).
+
+    Returns:
+        JSON array of MeasureItem objects.
+    """
+    return list_available_measures(category)
