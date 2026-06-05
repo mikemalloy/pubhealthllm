@@ -212,3 +212,35 @@ async def test_run_ask_forwards_message_history_to_run_agent():
         await run_ask("Follow-up question", message_history=history)
 
     run_agent_mock.assert_called_once_with("Follow-up question", message_history=history)
+
+
+async def test_run_ask_artifact_teaser_truncates_long_summary():
+    """chat_message in artifact mode is truncated to 200 chars + ellipsis."""
+    long_summary = "A" * 300  # well over _TEASER_LENGTH
+    long_phr = PublicHealthResponse(
+        summary=long_summary,
+        evidence=["Finding"],
+        statistics=[],
+        caveats=["Caveat"],
+        sources=["Source"],
+        disclaimer=(
+            "This tool provides decision support only. All recommendations "
+            "require validation by qualified public health professionals. "
+            "Data reflects historical surveillance and may not capture "
+            "current conditions."
+        ),
+    )
+    with (
+        patch(
+            "pubhealth_llm.app.orchestrator.plan_request",
+            new=AsyncMock(return_value=_ARTIFACT_PLAN),
+        ),
+        patch(
+            "pubhealth_llm.app.orchestrator.run_agent",
+            new=AsyncMock(return_value=long_phr),
+        ),
+    ):
+        response = await run_ask("Long summary question")
+
+    assert response.chat_message == "A" * 200 + "…"
+    assert len(response.chat_message) == 201
