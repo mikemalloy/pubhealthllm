@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase B, item B1 (not started).
+**You are here →** Phase B, item B2 (not started).
 
 ---
 
@@ -55,7 +55,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 - [x] **B0. conftest auth fixture FIRST** (CLAUDE.md known concern). Add an
       autouse fixture overriding `clerk_guard` via `app.dependency_overrides`
       before adding any guarded route.
-- [ ] **B1. `POST /ask`.** Add `AskRequest` model (question + optional
+- [x] **B1. `POST /ask`.** Add `AskRequest` model (question + optional
       `message_history`). Handler: `await run_ask(...)` → return `AskResponse`.
       `Depends(clerk_guard)`.
 - [ ] **B2. `GET /measures`.** Wrap `get_available_measures()`; return structured
@@ -81,6 +81,9 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-05 — Phase B1 complete. POST /ask wired to run_ask; AskRequest
+  added to schemas.py; conftest autouse handles auth. 11 new tests, all
+  green offline.
 - 2026-06-05 — Phase B0 complete. clerk_guard lazy-init in server.py;
   autouse override_clerk_guard fixture in conftest.py; fragile ClerkHTTPBearer
   patch removed from test_health.py. Suite green and offline.

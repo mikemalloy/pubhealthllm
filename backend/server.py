@@ -2,9 +2,12 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
+
+from pubhealth_llm.app.orchestrator import run_ask
+from pubhealth_llm.app.schemas import AskRequest, AskResponse
 
 app = FastAPI(title="pubHealthLLM API", version="0.1.0")
 
@@ -68,3 +71,17 @@ def health():
             "chroma": str(_DATA_DIR / "chroma_db"),
         },
     }
+
+
+@app.post("/ask", response_model=AskResponse)
+async def ask(req: AskRequest, _: Any = Depends(clerk_guard)) -> AskResponse:
+    """
+    Answer a public health question.
+
+    Calls run_ask() which makes a single LLM call and returns a structured
+    AskResponse. run_ask handles all errors internally — it always returns
+    a valid AskResponse and never raises.
+
+    Requires: valid Clerk JWT in Authorization header.
+    """
+    return await run_ask(req.question, req.message_history)

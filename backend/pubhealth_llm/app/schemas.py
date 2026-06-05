@@ -329,3 +329,21 @@ class Plan(BaseModel):
                 f"Got artifact_type={self.artifact_type!r}."
             )
         return self
+
+
+# ---------------------------------------------------------------------------
+# HTTP request models — /ask endpoint
+# ---------------------------------------------------------------------------
+
+
+class AskRequest(BaseModel):
+    """Request body for POST /ask."""
+
+    question: str = Field(
+        min_length=1,
+        description="The user's public health question (required, non-empty).",
+    )
+    message_history: Optional[list] = Field(
+        None,
+        description="Optional list of prior conversation turns for multi-turn context.",
+    )
