@@ -13,60 +13,26 @@ from pubhealth_llm.app.schemas import ArtifactEnvelope, AskMeta, AskResponse, Pl
 def test_plan_artifact_type_is_optional():
     """artifact_type is optional — can be None even in artifact mode."""
     p = Plan(
-        intent="look up diabetes statistics",
         mode="artifact",
-        artifact_type=None,
-        dispatch_target="reporter",
-        confidence=0.95,
+        intent="look up diabetes statistics",
+        reason="data keywords detected",
     )
     assert p.mode == "artifact"
-    assert p.dispatch_target == "reporter"
     assert p.artifact_type is None
 
 
 def test_plan_chat_mode_valid():
     p = Plan(
-        intent="clarifying question about the tool",
         mode="chat",
-        artifact_type=None,
-        dispatch_target="responder",
-        confidence=0.8,
+        intent="clarifying question about the tool",
+        reason="no data keywords",
     )
     assert p.mode == "chat"
-    assert p.dispatch_target == "responder"
 
 
-def test_plan_confidence_rejects_above_one():
-    with pytest.raises(Exception):
-        Plan(
-            intent="x",
-            mode="chat",
-            dispatch_target="responder",
-            confidence=1.5,
-        )
-
-
-def test_plan_confidence_rejects_below_zero():
-    with pytest.raises(Exception):
-        Plan(
-            intent="x",
-            mode="chat",
-            dispatch_target="responder",
-            confidence=-0.1,
-        )
-
-
-def test_plan_mode_dispatch_target_must_be_compatible():
-    """mode='chat' with dispatch_target='reporter' must raise ValidationError."""
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError):
-        Plan(
-            intent="x",
-            mode="chat",
-            dispatch_target="reporter",
-            confidence=0.5,
-        )
+def test_plan_has_reason_field():
+    p = Plan(mode="chat", intent="greeting", reason="user said hi")
+    assert isinstance(p.reason, str)
 
 
 # ---------------------------------------------------------------------------

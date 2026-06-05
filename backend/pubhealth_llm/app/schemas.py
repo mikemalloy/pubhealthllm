@@ -9,6 +9,7 @@ Usage:
     from pubhealth_llm.app.schemas import PublicHealthResponse
 """
 
+from enum import Enum
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -214,80 +215,58 @@ class ComparisonResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Multi-agent routing schemas (planner → responder / reporter)
+# Multi-agent routing schemas — ARCHITECTURE.md §3a contract
 # ---------------------------------------------------------------------------
 
 
-class Plan(BaseModel):
+class ArtifactType(str, Enum):
+    """Enum of artifact sub-types that the frontend knows how to render."""
+
+    report = "report"
+    table = "table"
+    comparison = "comparison"
+    ranking = "ranking"
+    choropleth_map = "choropleth_map"
+    mortality = "mortality"
+    decision_tree = "decision_tree"
+
+
+class Artifact(BaseModel):
     """
-    Routing decision produced by the planner agent.
+    A structured artifact for the frontend artifact panel.
 
-    The planner classifies the incoming question and chooses where to send it:
-      - mode="chat"     → responder (conversational path)
-      - mode="artifact" → run_agent reporter (structured report path)
-    """
-
-    intent: str = Field(description="One-phrase description of the user's intent")
-    mode: Literal["chat", "artifact"] = Field(
-        description="Render surface: 'chat' for conversational, 'artifact' for reports"
-    )
-    artifact_type: Optional[Literal["report", "comparison", "ranking", "mortality"]] = Field(
-        None,
-        description="Artifact sub-type when mode='artifact'. None is valid.",
-    )
-    dispatch_target: Literal["responder", "reporter"] = Field(
-        description="'responder' for chat path, 'reporter' for full structured report"
-    )
-    confidence: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Planner's confidence in this routing decision (0.0–1.0)",
-    )
-
-    @model_validator(mode="after")
-    def _validate_mode_matches_target(self) -> "Plan":
-        chat_mode = self.mode == "chat"
-        responder_target = self.dispatch_target == "responder"
-        if chat_mode != responder_target:
-            raise ValueError(
-                f"mode='{self.mode}' is incompatible with dispatch_target='{self.dispatch_target}'. "
-                "Use mode='chat' with dispatch_target='responder', "
-                "or mode='artifact' with dispatch_target='reporter'."
-            )
-        return self
-
-
-class ArtifactEnvelope(BaseModel):
-    """
-    Wraps a structured artifact for the frontend artifact panel.
-
-    For type='report', payload is a serialized PublicHealthResponse (model_dump()).
-    Other types (comparison, ranking, mortality) carry their own payload shapes
-    — defined by future artifact renderers.
+    For type=report, payload is a serialized PublicHealthResponse (model_dump()).
+    Other types carry their own payload shapes — defined by per-type renderers.
     """
 
-    type: Literal["report", "comparison", "ranking", "mortality"] = Field(
-        description="Artifact sub-type"
-    )
+    type: ArtifactType = Field(description="Artifact sub-type driving the frontend renderer")
     title: str = Field(description="Short title shown in the artifact panel header")
     payload: dict = Field(description="Serialized artifact data")
 
 
-class AskMeta(BaseModel):
+# Backward-compat alias — existing code that imports ArtifactEnvelope still works
+ArtifactEnvelope = Artifact
+
+
+class Meta(BaseModel):
     """Execution metadata attached to every AskResponse."""
 
-    intent: str = Field(description="Classified intent string from the planner")
+    intent: str = Field(description="Classified intent from the planner")
     tools_used: list[str] = Field(
-        default_factory=list,
+        default=[],
         description="Tool names called during this request",
     )
-    model: str = Field(description="Model(s) used, e.g. 'planner+reporter'")
-    timing_ms: int = Field(ge=0, description="Wall-clock time from request to response")
+    model: str = Field(default="", description="Model(s) used, e.g. 'planner+reporter'")
+    timing_ms: int = Field(default=0, description="Wall-clock time from request to response in ms")
+
+
+# Backward-compat alias
+AskMeta = Meta
 
 
 class AskResponse(BaseModel):
     """
-    Envelope returned by run_ask() — the /ask contract.
+    Envelope returned by run_ask() — the /ask API contract.
 
     chat_message is always present. artifact is present only when mode='artifact'.
 
@@ -306,13 +285,13 @@ class AskResponse(BaseModel):
     chat_message: str = Field(
         min_length=1,
         description="Always present. For chat: the full response. "
-        "For artifact: a one-sentence teaser (first 200 chars of summary)."
+        "For artifact: a one-sentence teaser (first 200 chars of summary).",
     )
-    artifact: Optional[ArtifactEnvelope] = Field(
+    artifact: Optional[Artifact] = Field(
         None,
         description="Present when mode='artifact', null when mode='chat'",
     )
-    meta: AskMeta
+    meta: Meta
 
     @model_validator(mode="after")
     def _validate_artifact_presence(self) -> "AskResponse":
@@ -321,3 +300,23 @@ class AskResponse(BaseModel):
         if self.mode == "chat" and self.artifact is not None:
             raise ValueError("artifact must be None when mode='chat'")
         return self
+
+
+class Plan(BaseModel):
+    """
+    Routing decision produced by the planner agent.
+
+    The planner classifies the incoming question and chooses where to send it:
+      - mode="chat"     → responder (conversational path)
+      - mode="artifact" → run_agent reporter (structured report path)
+    """
+
+    mode: Literal["chat", "artifact"] = Field(
+        description="Render surface: 'chat' for conversational, 'artifact' for reports"
+    )
+    artifact_type: Optional[ArtifactType] = Field(
+        None,
+        description="Artifact sub-type when mode='artifact'. None is valid.",
+    )
+    intent: str = Field(description="One-phrase description of the user's intent")
+    reason: str = Field(description="Short explanation of routing decision, for debugging/audit")
