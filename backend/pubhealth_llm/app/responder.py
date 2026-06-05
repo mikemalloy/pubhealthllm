@@ -1,5 +1,7 @@
 # backend/pubhealth_llm/app/responder.py
 """
+Deferred per ARCHITECTURE.md §3a — not on the request path yet.
+
 Responder agent — handles conversational / chat-path responses.
 
 The responder answers simple questions about the tool, clarifications,
@@ -7,7 +9,7 @@ and any follow-up that does not require data retrieval. It does not
 call CDC tools — that is the reporter's job.
 
 Public API:
-    message = await run_responder("What can this tool do?")
+    message = await respond("What can this tool do?")
     # returns a plain string
 """
 
@@ -85,3 +87,6 @@ async def run_responder(question: str, message_history: Optional[list] = None) -
     agent = _get_responder()
     result = await agent.run(question, message_history=message_history or [])
     return str(result.output)
+
+
+respond = run_responder  # public API alias

@@ -3,8 +3,8 @@
 Orchestrator — entry point for /ask requests.
 
 run_ask() is the single public function in this module. It:
-  1. Calls the planner to classify the question and choose a render surface.
-  2. Routes to run_responder (chat) or run_agent (artifact/reporter).
+  1. Calls run_agent exactly once to retrieve a PublicHealthResponse.
+  2. Derives render mode heuristically: statistics present → artifact, else → chat.
   3. Assembles and returns a typed AskResponse envelope.
 
 This module is intentionally free of FastAPI and HTTP concerns — it is a
@@ -17,16 +17,26 @@ Usage:
     # response.mode       → "artifact"
     # response.artifact   → Artifact(type=ArtifactType.report, ...)
     # response.meta       → Meta(intent="...", timing_ms=1234)
+
+Design note:
+    Planner and responder are parked per ARCHITECTURE.md §3a — not on the
+    request path. The _is_report_worthy() function is the swap point: replace
+    its body with a planner LLM call when §3a re-introduces the planner.
 """
 
 import logging
 import time
 from typing import Optional
 
+from pubhealth_llm.app import config
 from pubhealth_llm.app.agent import run_agent
-from pubhealth_llm.app.planner import plan_request
-from pubhealth_llm.app.responder import run_responder
-from pubhealth_llm.app.schemas import Artifact, ArtifactType, AskResponse, Meta
+from pubhealth_llm.app.schemas import (
+    Artifact,
+    ArtifactType,
+    AskResponse,
+    Meta,
+    PublicHealthResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +44,24 @@ logger = logging.getLogger(__name__)
 _TEASER_LENGTH = 200
 
 
+def _is_report_worthy(resp: PublicHealthResponse) -> bool:
+    """Return True when resp.statistics is non-empty.
+
+    Swap point for a future planner LLM — replace this function body when
+    ARCHITECTURE.md §3a re-introduces the planner in a later phase.
+    """
+    return bool(resp.statistics)
+
+
 async def run_ask(
     question: str,
     message_history: Optional[list] = None,
 ) -> AskResponse:
     """
-    Route a user question through the multi-agent layer.
+    Route a user question through the lean single-agent path.
+
+    Makes exactly one LLM call (run_agent). Derives render mode from the
+    payload heuristically: statistics present → artifact, else → chat.
 
     Args:
         question:        The user's natural language question.
@@ -47,51 +69,60 @@ async def run_ask(
 
     Returns:
         AskResponse with mode, chat_message, optional artifact, and meta.
+        Never raises — exceptions produce a graceful chat fallback.
     """
     start_ms = int(time.monotonic() * 1000)
 
-    plan = await plan_request(question)
-
-    if plan.mode == "chat":
-        try:
-            chat_message = await run_responder(question, message_history=message_history)
-            timing_ms = int(time.monotonic() * 1000) - start_ms
-            return AskResponse(
-                mode="chat",
-                chat_message=chat_message,
-                artifact=None,
-                meta=Meta(
-                    intent=plan.intent,
-                    tools_used=[],  # TODO: populate from agent result.all_messages() in a follow-up
-                    model="planner+responder",
-                    timing_ms=timing_ms,
-                ),
-            )
-        except Exception as exc:
-            logger.warning(
-                "Responder failed (%s), falling back to reporter", exc
-            )
-            # Fall through to artifact/reporter path below
-
-    # artifact path — full reporter
-    pub_health_response = await run_agent(question, message_history=message_history)
-
-    summary = pub_health_response.summary
-    teaser = summary[:_TEASER_LENGTH] + "…" if len(summary) > _TEASER_LENGTH else summary
+    try:
+        result = await run_agent(question, message_history=message_history)
+    except Exception as exc:
+        logger.error("Agent failed (%s), returning apologetic chat response", exc)
+        timing_ms = int(time.monotonic() * 1000) - start_ms
+        return AskResponse(
+            mode="chat",
+            chat_message=(
+                "I'm sorry — I wasn't able to retrieve data for your question right now. "
+                "Please try again in a moment."
+            ),
+            artifact=None,
+            meta=Meta(
+                intent=question[:200],
+                tools_used=[],
+                model=config.get_model(),
+                timing_ms=timing_ms,
+            ),
+        )
 
     timing_ms = int(time.monotonic() * 1000) - start_ms
-    return AskResponse(
-        mode="artifact",
-        chat_message=teaser,
-        artifact=Artifact(
-            type=plan.artifact_type or ArtifactType.report,
-            title=plan.intent,
-            payload=pub_health_response.model_dump(),
-        ),
-        meta=Meta(
-            intent=plan.intent,
-            tools_used=[],  # TODO: populate from agent result.all_messages() in a follow-up
-            model="planner+reporter",
-            timing_ms=timing_ms,
-        ),
-    )
+
+    if _is_report_worthy(result):
+        summary = result.summary
+        teaser = summary[:_TEASER_LENGTH] + "…" if len(summary) > _TEASER_LENGTH else summary
+        title = summary[:80].rstrip() if len(summary) > 80 else summary
+        return AskResponse(
+            mode="artifact",
+            chat_message=teaser,
+            artifact=Artifact(
+                type=ArtifactType.report,
+                title=title,
+                payload=result.model_dump(),
+            ),
+            meta=Meta(
+                intent=question[:200],
+                tools_used=[],
+                model=config.get_model(),
+                timing_ms=timing_ms,
+            ),
+        )
+    else:
+        return AskResponse(
+            mode="chat",
+            chat_message=result.summary,
+            artifact=None,
+            meta=Meta(
+                intent=question[:200],
+                tools_used=[],
+                model=config.get_model(),
+                timing_ms=timing_ms,
+            ),
+        )

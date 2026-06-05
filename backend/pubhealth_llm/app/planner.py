@@ -1,5 +1,7 @@
 # backend/pubhealth_llm/app/planner.py
 """
+Deferred per ARCHITECTURE.md §3a — not on the request path yet.
+
 Planner agent — classifies request intent and routes to responder or reporter.
 
 The planner is a cheap, fast Haiku agent with structured output.
