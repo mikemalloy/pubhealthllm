@@ -8,7 +8,8 @@ Its ONLY job is classification + routing — it never answers the question.
 Public API:
     plan = await plan_request("What is the diabetes rate in Travis County?")
     # plan.mode        → "artifact"
-    # plan.dispatch_target → "reporter"
+    # plan.intent      → "diabetes statistics query"
+    # plan.reason      → "named county + disease keyword"
 """
 
 import logging
@@ -20,7 +21,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
-from pubhealth_llm.app.schemas import Plan
+from pubhealth_llm.app.schemas import ArtifactType, Plan
 
 load_dotenv()
 
@@ -46,17 +47,18 @@ ROUTE TO RESPONDER (mode=chat) when:
 - The user asks a follow-up clarification about a prior answer
 - The question is a greeting or meta-question about the tool itself
 
-Set confidence to your routing certainty (0.0–1.0).
-Set intent to a brief one-phrase description of what the user wants.
-Set artifact_type to 'report' for most data questions.
+Fields to set:
+- mode: "artifact" for data questions, "chat" for conversational questions
+- artifact_type: "report" for most data questions; null for chat
+- intent: one-phrase description of what the user wants
+- reason: brief explanation of your routing decision (1 sentence, for debugging)
 """
 
 _FALLBACK_PLAN = Plan(
-    intent="unknown — planner error, defaulting to reporter",
     mode="artifact",
-    artifact_type="report",
-    dispatch_target="reporter",
-    confidence=0.0,
+    artifact_type=ArtifactType.report,
+    intent="unknown — planner error, defaulting to reporter",
+    reason="fallback: planner raised an exception",
 )
 
 _planner_agent: Optional[Agent] = None
@@ -99,7 +101,7 @@ async def plan_request(question: str) -> Plan:
         question: The user's raw question string.
 
     Returns:
-        Plan with mode, dispatch_target, artifact_type, confidence, intent.
+        Plan with mode, artifact_type, intent, and reason.
     """
     try:
         agent = _get_planner()

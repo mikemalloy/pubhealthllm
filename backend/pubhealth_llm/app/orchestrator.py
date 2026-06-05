@@ -15,8 +15,8 @@ Usage:
 
     response = await run_ask("What is the diabetes rate in Travis County, TX?")
     # response.mode       → "artifact"
-    # response.artifact   → ArtifactEnvelope(type="report", ...)
-    # response.meta       → AskMeta(intent="...", timing_ms=1234)
+    # response.artifact   → Artifact(type=ArtifactType.report, ...)
+    # response.meta       → Meta(intent="...", timing_ms=1234)
 """
 
 import logging
@@ -26,7 +26,7 @@ from typing import Optional
 from pubhealth_llm.app.agent import run_agent
 from pubhealth_llm.app.planner import plan_request
 from pubhealth_llm.app.responder import run_responder
-from pubhealth_llm.app.schemas import ArtifactEnvelope, AskMeta, AskResponse
+from pubhealth_llm.app.schemas import Artifact, ArtifactType, AskResponse, Meta
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ async def run_ask(
                 mode="chat",
                 chat_message=chat_message,
                 artifact=None,
-                meta=AskMeta(
+                meta=Meta(
                     intent=plan.intent,
                     tools_used=[],  # TODO: populate from agent result.all_messages() in a follow-up
                     model="planner+responder",
@@ -83,12 +83,12 @@ async def run_ask(
     return AskResponse(
         mode="artifact",
         chat_message=teaser,
-        artifact=ArtifactEnvelope(
-            type=plan.artifact_type or "report",
+        artifact=Artifact(
+            type=plan.artifact_type or ArtifactType.report,
             title=plan.intent,
             payload=pub_health_response.model_dump(),
         ),
-        meta=AskMeta(
+        meta=Meta(
             intent=plan.intent,
             tools_used=[],  # TODO: populate from agent result.all_messages() in a follow-up
             model="planner+reporter",

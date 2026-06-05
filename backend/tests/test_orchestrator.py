@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 from pubhealth_llm.app.schemas import (
+    ArtifactType,
     AskResponse,
     Plan,
     PublicHealthResponse,
@@ -14,19 +15,17 @@ from pubhealth_llm.app.orchestrator import run_ask
 # ---------------------------------------------------------------------------
 
 _CHAT_PLAN = Plan(
-    intent="user asking what the tool can do",
     mode="chat",
     artifact_type=None,
-    dispatch_target="responder",
-    confidence=0.9,
+    intent="user asking what the tool can do",
+    reason="meta-question about capabilities",
 )
 
 _ARTIFACT_PLAN = Plan(
-    intent="diabetes statistics in Travis County TX",
     mode="artifact",
-    artifact_type="report",
-    dispatch_target="reporter",
-    confidence=0.95,
+    artifact_type=ArtifactType.report,
+    intent="diabetes statistics in Travis County TX",
+    reason="named county + disease keyword",
 )
 
 _MINIMAL_PHR = PublicHealthResponse(
