@@ -21,7 +21,7 @@ import pytest
     os.getenv("RUN_SMOKE") != "1",
     reason="Smoke test skipped by default. Set RUN_SMOKE=1 to run.",
 )
-def test_run_agent_smoke(anthropic_api_key):
+def test_run_agent_smoke(_anthropic_api_key):
     """
     One real run_agent() call. Asserts a valid PublicHealthResponse is returned.
     This is the tripwire after a model swap — if this fails, the model config is broken.

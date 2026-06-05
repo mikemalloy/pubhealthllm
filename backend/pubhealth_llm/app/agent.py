@@ -15,6 +15,7 @@ Usage:
     response = await run_agent("What is the obesity rate in Travis County, TX?")
 """
 
+import datetime
 import logging
 import os
 from typing import Optional
@@ -353,8 +354,6 @@ def _log_query(question: str, response_summary: str) -> None:
         question:         The user's original question.
         response_summary: First line of the agent's response summary.
     """
-    import datetime
-
     timestamp = datetime.datetime.now().isoformat(timespec="seconds")
     entry = f"[{timestamp}] Q: {question!r}\n             A: {response_summary!r}\n"
     try:

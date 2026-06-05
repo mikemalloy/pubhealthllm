@@ -9,7 +9,7 @@ No live Anthropic API calls are made in this module.
 import pytest
 
 
-def test_public_health_response_minimal(anthropic_api_key):
+def test_public_health_response_minimal():
     """PublicHealthResponse validates with only required fields."""
     from pubhealth_llm.app.schemas import PublicHealthResponse
 
@@ -24,7 +24,7 @@ def test_public_health_response_minimal(anthropic_api_key):
     assert resp.disclaimer  # default disclaimer must be non-empty
 
 
-def test_public_health_response_to_markdown(anthropic_api_key):
+def test_public_health_response_to_markdown():
     """to_markdown() returns a non-empty string with expected sections."""
     from pubhealth_llm.app.schemas import PublicHealthResponse, StatisticEntry
 

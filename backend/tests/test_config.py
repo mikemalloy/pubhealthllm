@@ -4,9 +4,9 @@ Tests for pubhealth_llm.app.config — model configuration and validation.
 All tests use monkeypatch — no real env vars, no network calls.
 """
 
-import importlib
-
 import pytest
+
+from pubhealth_llm.app.config import DEFAULT_MODEL
 
 
 # ---------------------------------------------------------------------------
@@ -18,15 +18,13 @@ def test_get_model_default_when_unset(monkeypatch):
     """get_model() returns the Claude Sonnet default when PUBHEALTH_MODEL is unset."""
     monkeypatch.delenv("PUBHEALTH_MODEL", raising=False)
     import pubhealth_llm.app.config as cfg
-    importlib.reload(cfg)
-    assert cfg.get_model() == "anthropic:claude-sonnet-4-6"
+    assert cfg.get_model() == DEFAULT_MODEL
 
 
 def test_get_model_override(monkeypatch):
     """get_model() respects the PUBHEALTH_MODEL env var when set."""
     monkeypatch.setenv("PUBHEALTH_MODEL", "openai:gpt-4o-mini")
     import pubhealth_llm.app.config as cfg
-    importlib.reload(cfg)
     assert cfg.get_model() == "openai:gpt-4o-mini"
 
 
@@ -46,7 +44,7 @@ def test_validate_model_config_unknown_provider(monkeypatch):
     """validate_model_config() raises for an unknown provider (groq is dropped)."""
     monkeypatch.setenv("GROQ_API_KEY", "gk-test")
     from pubhealth_llm.app.config import validate_model_config
-    with pytest.raises((ValueError, EnvironmentError), match="groq"):
+    with pytest.raises(ValueError, match="not supported"):
         validate_model_config("groq:llama-3.3-70b-versatile")
 
 
