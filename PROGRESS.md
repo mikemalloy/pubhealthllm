@@ -18,7 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase B, item B4 (not started).
+**You are here →** Phase B, item B6 (B4 deferred to hardening). Path from here:
+B6 → Phase C (run locally) → Phase D (Railway) → UI.
 
 ---
 
@@ -62,17 +63,43 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
       JSON (not the formatted string). `Depends(clerk_guard)`.
 - [x] **B3. Apply auth + real config.** `Depends(clerk_guard)` on `/ask` +
       `/measures`; `/health` stays public; set real `CLERK_JWKS_URL`.
-- [ ] **B4. Rate limiting.** Add `slowapi` (not in requirements yet); per-user/IP
-      limit on `/ask`.
-- [ ] **B5. Fail-fast startup validation.** Call `validate_model_config()` in a
+- [x] ~~**B4. Rate limiting.**~~ **DEFERRED to hardening.** The Anthropic spend
+      cap (set in Console → Workspaces → Limits) is the real bill backstop; with
+      `/ask` Clerk-gated and traffic near zero, an app-level limiter buys little
+      now. Leave a `# TODO: rate limit — see hardening` comment on `/ask`.
+- [x] **B5. Fail-fast startup validation.** Call `validate_model_config()` in a
       FastAPI lifespan hook; assert `data/` files exist. Bad config fails at boot.
 - [ ] **B6. HTTP tests.** `/ask` happy path (mock `run_ask`), `/ask` 401 without
-      token, `/measures`, rate-limit behavior.
+      token, `/measures`. (Rate-limit test dropped with B4.)
+
+---
+
+## Phase C — Run locally (verify before deploy)
+
+- [ ] **C1. Boot + smoke.** `uvicorn server:app` starts clean; `GET /health` →
+      200. Document the exact run command in README.
+- [ ] **C2. Live API check.** With real `ANTHROPIC_API_KEY` + Clerk env set, hit
+      `/ask` and `/measures` with a valid token (curl/httpx) and confirm a real
+      `AskResponse` and the measures JSON come back. This is the first real
+      end-to-end LLM call — confirms the contract holds against a live model.
+
+## Phase D — Deploy to Railway
+
+- [ ] **D1. Dockerfile.railway builds locally** with `data/` baked in (db +
+      chroma); image runs and serves `/health`.
+- [ ] **D2. Railway service** created; env vars set (`ANTHROPIC_API_KEY`,
+      `CLERK_JWKS_URL`, `PUBHEALTH_MODEL`, any Clerk secret); deploy succeeds.
+- [ ] **D3. Live verification** — `/health`, then authed `/ask` + `/measures`
+      against the Railway URL.
+- [ ] **D4. CONFIRM Anthropic spend cap is set** before sharing the URL
+      (prerequisite for the deferred B4).
 
 ---
 
 ## Deploy-time hardening (not blocking a working API)
 
+- [ ] **Rate limit `/ask`** (deferred B4) — prereq: confirm Anthropic spend cap
+      is set. Add `slowapi`, per-user key, env-configurable limit.
 - [ ] Narrow CORS `allow_headers` to `["Authorization", "Content-Type"]`.
 - [ ] Real frontend origins in CORS allow-list.
 - [ ] Secrets in Railway env (`ANTHROPIC_API_KEY`, Clerk keys).
@@ -81,6 +108,11 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-06 — Phase B5 complete. lifespan handler in server.py: validate_model_config()
+  first, then is_dir() check on chroma_db (not just exists()), then exists() on healthgpt.db.
+  test_startup.py: 4 tests (success, model-failure, db-failure, chroma-failure). Quality
+  fixes: chroma check is_dir(), model-failure test tightened to ValueError only, stale B5
+  comment removed from _get_clerk_bearer, chroma branch covered by new test. 35 tests green.
 - 2026-06-05 — Phase B3 complete. test_auth.py: 4 tests covering /health public,
   /ask + /measures require auth (401/403 via no_auth fixture). server.py: lazy
   Clerk init with env-driven CLERK_JWKS_URL; accurate comment on empty-URL 500
