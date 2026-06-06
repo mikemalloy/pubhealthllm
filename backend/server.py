@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from typing import Any, Optional
@@ -9,6 +10,8 @@ from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
 from pubhealth_llm.app.orchestrator import run_ask
 from pubhealth_llm.app.schemas import AskRequest, AskResponse, MeasureItem
 from pubhealth_llm.app.tools import list_available_measures
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="pubHealthLLM API", version="0.1.0")
 
@@ -34,14 +37,20 @@ def _get_clerk_bearer() -> ClerkHTTPBearer:
     """Return the ClerkHTTPBearer singleton, creating it on first call.
 
     Lazy so that importing server in tests never triggers a JWKS fetch.
-    Set CLERK_JWKS_URL to the real endpoint in production.
+    CLERK_JWKS_URL must be set in the environment. If absent, a warning is
+    logged and requests to protected routes will be rejected.
+    B5 will upgrade the missing-URL case to a hard startup failure.
     """
     global _clerk_bearer
     if _clerk_bearer is None:
-        jwks_url = os.getenv(
-            "CLERK_JWKS_URL",
-            "https://placeholder.clerk.invalid/.well-known/jwks.json",
-        )
+        jwks_url = os.getenv("CLERK_JWKS_URL")
+        if not jwks_url:
+            logger.warning(
+                "CLERK_JWKS_URL is not set. Requests to protected routes will fail. "
+                "Set CLERK_JWKS_URL in your .env file. "
+                "(Hard startup validation is planned for a later phase.)"
+            )
+            jwks_url = ""  # PyJWKClient will error on first request (500); B5 makes this fail-fast
         _clerk_bearer = ClerkHTTPBearer(ClerkConfig(jwks_url=jwks_url))
     return _clerk_bearer
 
