@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase D, item D3. Path from here:
-D3 → D4 → UI.
+**You are here →** Phase D, item D4. Path from here:
+D4 → UI.
 
 C2 live check passed the contract (chat / artifact modes correct, real CDC PLACES
 statistics in payloads). Two findings surfaced, to clear before Docker:
@@ -102,7 +102,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
       chroma); image runs and serves `/health`.
 - [x] **D2. Railway service** created; env vars set (`ANTHROPIC_API_KEY`,
       `CLERK_JWKS_URL`, `PUBHEALTH_MODEL`, any Clerk secret); deploy succeeds.
-- [ ] **D3. Live verification** — `/health`, then authed `/ask` + `/measures`
+- [x] **D3. Live verification** — `/health`, then authed `/ask` + `/measures`
       against the Railway URL.
 - [ ] **D4. CONFIRM Anthropic spend cap is set** before sharing the URL
       (prerequisite for the deferred B4).
@@ -121,6 +121,13 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Phase D3 complete. scripts/verify_railway.py created (Clerk
+  backend SDK: list users → create session → mint JWT → call Railway).
+  Part 1 (unauth): /health → 200, /ask → 403, /measures → 403. Part 2
+  (authed, mike.malloy.2004@gmail.com): GET /measures → 200 (39 measures),
+  POST /ask → 200 mode=artifact, tools_used=[tool_get_health_statistics,
+  tool_search_mmwr_reports], Travis County diabetes 9.0% crude/9.5%
+  age-adj (CDC PLACES 2023). Full contract confirmed on Railway.
 - 2026-06-07 — Phase D2 complete. Railway deploy succeeded at
   https://pubhealthllm-production.up.railway.app — GET /health → 200
   {"status":"ok","version":"0.1.0"}. Root cause of crash was LFS pointer
