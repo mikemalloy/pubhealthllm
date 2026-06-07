@@ -18,11 +18,14 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase D, item D4. Path from here:
-D4 → UI.
+**You are here →** Phase E, item E2. Backend is DONE:
+deployed to Railway, auth enforced, live `/ask` returns real data with
+`tools_used` populated. Path: E1 → E2 → E3 → E4 → E5 → E6 (Vercel). UI framework
+only this phase — NO pubHealth data hookup yet.
 
-C2 live check passed the contract (chat / artifact modes correct, real CDC PLACES
-statistics in payloads). Two findings surfaced, to clear before Docker:
+⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
+vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
+streaming (perceived latency) during the UI phase. Tracked in "Perf / hardening".
 
 ---
 
@@ -104,22 +107,77 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
       `CLERK_JWKS_URL`, `PUBHEALTH_MODEL`, any Clerk secret); deploy succeeds.
 - [x] **D3. Live verification** — `/health`, then authed `/ask` + `/measures`
       against the Railway URL.
-- [ ] **D4. CONFIRM Anthropic spend cap is set** before sharing the URL
-      (prerequisite for the deferred B4).
+- [x] **D4. Anthropic spend cap set.** Confirmed by Mike before sharing the URL.
+
+**Backend complete.** Live at https://pubhealthllm-production.up.railway.app
 
 ---
 
-## Deploy-time hardening (not blocking a working API)
+## Phase E — Frontend (UI framework only; NO pubHealth data yet)
 
-- [ ] **Rate limit `/ask`** (deferred B4) — prereq: confirm Anthropic spend cap
-      is set. Add `slowapi`, per-user key, env-configurable limit.
+Built in `frontend/` from the shadcn template at
+`/Volumes/Hub/dev/ui-templates/shadcn` (read-only). Decisions locked:
+copy-and-strip the template; real Clerk on the SAME instance as the backend;
+navbar "Dashboard" → public Home (chart demos dropped); sidebar user = Clerk,
+navbar avatar stays a static placeholder. Verification = `pnpm build` + lint +
+manual smoke (no pytest on the frontend). Placeholders use the template's panel
+style: `bg-primary-foreground p-4 rounded-lg`.
+
+- [x] **E1. Copy + baseline boot.** Copy the template into `frontend/` (replace
+      the placeholder). Remove the template's own `.git`/workspace artifacts,
+      rename in `package.json`. `pnpm install && pnpm dev` renders the template
+      unchanged. Commit a known-good baseline BEFORE modifying.
+- [ ] **E2. Strip + rebrand the sidebar.** Header label → "PubHealth". Keep ONLY
+      the Application group; delete Projects, Collapsible Group, Nested Items.
+      Application items become: Home (`/`, home icon) and "Pub Health LLM"
+      (`/llm`, `message-square` lucide icon). Keep `collapsible="icon"` + the
+      footer user slot + the `SidebarTrigger` hide behavior.
+- [ ] **E3. Pages (placeholders).** Home `/` = PUBLIC, reasonable made-up
+      PubHealth intro copy in rounded panels (chart demos removed). "Pub Health
+      LLM" `/llm` = placeholder panel, will be auth-gated in E4. Navbar
+      "Dashboard" link → `/`.
+- [ ] **E4. Clerk (real, backend's instance).** Add `@clerk/nextjs`;
+      `<ClerkProvider>` in layout; `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` +
+      `CLERK_SECRET_KEY` from the SAME Clerk instance as the backend's
+      `CLERK_JWKS_URL`; `.env.example` documents them (no real values committed).
+      `middleware.ts` protects `/llm` (redirect to sign-in), Home stays public.
+      Sidebar footer user → Clerk-driven (`useUser`, `openUserProfile`,
+      `signOut`) keeping the up-arrow dropdown; signed-out → Sign in. Navbar
+      avatar stays a static placeholder. Keep theme picker as-is.
+- [ ] **E5. Verify.** `pnpm build` passes, lint clean; manual smoke: Home loads
+      logged-out; `/llm` redirects to sign-in when logged-out and renders when
+      logged-in; sidebar collapse + theme toggle work. Capture a screenshot.
+- [ ] **E6. Deploy to Vercel.** Project root directory = `frontend`; set Clerk
+      env vars; deploy; verify the live URL (Home public, `/llm` gated). Add the
+      Vercel origin to the backend CORS allow-list (hardening item).
+
+---
+
+## Perf / hardening (not blocking)
+
+- [ ] **P1. `/ask` ~29s in prod.** Diagnose cold-start vs agentic loop (two
+      consecutive calls). If loop → SSE streaming for perceived latency (parked
+      in §3a); secondary: faster-model routing for simple Qs, result caching,
+      keep-warm to avoid cold start.
+- [ ] **Rate limit `/ask`** (deferred B4) — prereq met (spend cap set). Add
+      `slowapi`, per-user key, env-configurable limit.
 - [ ] Narrow CORS `allow_headers` to `["Authorization", "Content-Type"]`.
-- [ ] Real frontend origins in CORS allow-list.
+- [ ] Real frontend origins in CORS allow-list (do during Phase E).
 - [ ] Secrets in Railway env (`ANTHROPIC_API_KEY`, Clerk keys).
 
 ---
 
 ## Session log (newest first)
+
+- 2026-06-07 — Phase E1 complete. Copied shadcn template into frontend/
+  (excluded node_modules, .next, .git, pnpm-workspace.yaml). Renamed
+  package.json "name" to "pubhealth-frontend". Added .npmrc with
+  `only-built-dependencies[]=sharp` + `onlyBuiltDependencies` to lockfile
+  settings; used `--ignore-scripts` for pnpm install (sharp native optional).
+  Fixed 3 template lint errors (unused vars in EditUser.tsx + Navbar.tsx —
+  leftover from commented-out code in original template). pnpm dev → 200 at
+  localhost:3000, title "ShadCN Tutorial", Ready in 856ms. pnpm build → clean,
+  7 static pages, no warnings.
 
 - 2026-06-07 — Phase D3 complete. scripts/verify_railway.py created (Clerk
   backend SDK: list users → create session → mint JWT → call Railway).

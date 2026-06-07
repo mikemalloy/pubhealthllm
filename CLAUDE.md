@@ -8,18 +8,23 @@
    (`git add PROGRESS.md && git commit`). The commit is what makes the state
    survive a dead session — commit `PROGRESS.md` even if nothing else is ready.
 
-1. **TDD always.** Write the failing test first. Red → green → refactor.
-   No production code without a failing test that demanded it.
+1. **TDD always (backend).** Write the failing test first. Red → green →
+   refactor. No production code without a failing test that demanded it. (Applies
+   to the Python backend. The frontend uses build + lint + manual smoke checks,
+   not pytest — see Phase E.)
 
 2. **Use Superpowers.** Before any non-trivial work: invoke the relevant skill.
    Planning: `writing-plans`. Execution: `subagent-driven-development`.
    Debugging: `systematic-debugging`. New features: `brainstorming` first.
 
-3. **No frontend this session.** `frontend/` is a placeholder. Do not run
-   `create-next-app` or install npm packages until a frontend plan exists.
+3. **Frontend is now ACTIVE (Phase E).** Built in `frontend/` by copying the
+   shadcn template at `/Volumes/Hub/dev/ui-templates/shadcn` (read-only) and
+   stripping it down. Stack: Next.js 15 / React 19 / Tailwind 4 / shadcn /
+   next-themes / pnpm / lucide-react / Clerk. UI placeholders only — do NOT wire
+   pubHealth data/endpoints into the UI yet.
 
-4. **No `/ask` endpoint yet.** The agent HTTP layer is designed in a separate
-   session after the scaffold is reviewed.
+4. **Backend is DONE and deployed** (Railway, `/health` + `/ask` + `/measures`,
+   Clerk-guarded). Do NOT change backend behavior during the frontend phase.
 
 ## Project context
 
