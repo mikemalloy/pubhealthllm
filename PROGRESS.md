@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase D, item D2. Path from here:
-D2 → D3 → D4 → UI.
+**You are here →** Phase D, item D3. Path from here:
+D3 → D4 → UI.
 
 C2 live check passed the contract (chat / artifact modes correct, real CDC PLACES
 statistics in payloads). Two findings surfaced, to clear before Docker:
@@ -100,7 +100,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 - [x] **D1. Dockerfile.railway builds locally** with `data/` baked in (db +
       chroma); image runs and serves `/health`.
-- [ ] **D2. Railway service** created; env vars set (`ANTHROPIC_API_KEY`,
+- [x] **D2. Railway service** created; env vars set (`ANTHROPIC_API_KEY`,
       `CLERK_JWKS_URL`, `PUBHEALTH_MODEL`, any Clerk secret); deploy succeeds.
 - [ ] **D3. Live verification** — `/health`, then authed `/ask` + `/measures`
       against the Railway URL.
@@ -121,6 +121,13 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Phase D2 complete. Railway deploy succeeded at
+  https://pubhealthllm-production.up.railway.app — GET /health → 200
+  {"status":"ok","version":"0.1.0"}. Root cause of crash was LFS pointer
+  files baked instead of real data (Railway clones without LFS fetch).
+  Fix: removed all data/* from LFS tracking (.gitattributes cleared),
+  re-committed as regular git objects (healthgpt.db 69MB, chroma_db 3MB,
+  mmwr_pdfs 3.5MB — all under GitHub 100MB hard limit).
 - 2026-06-07 — Phase D2 (partial): railway.json added (builder=DOCKERFILE,
   dockerfilePath=Dockerfile.railway). LFS confirmed: healthgpt.db, chroma_db
   (4 files), mmwr_pdfs (9 PDFs) — all real objects (* marker, not pointers).
