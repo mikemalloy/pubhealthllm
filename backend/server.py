@@ -11,7 +11,7 @@ from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
 from pubhealth_llm.app.config import validate_model_config
 from pubhealth_llm.app.orchestrator import run_ask
 from pubhealth_llm.app.schemas import AskRequest, AskResponse, MeasureItem
-from pubhealth_llm.app.tools import list_available_measures
+from pubhealth_llm.app.tools import check_vector_store, list_available_measures
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
     Runs in order:
     1. Validate model config (provider + API key present).
     2. Assert baked data files exist (healthgpt.db and chroma_db/).
+    3. Vector store integrity check — loads the ChromaDB collection and
+       confirms it is non-empty.
 
     Raises immediately on misconfiguration so the container dies at boot,
     not on the first request.
@@ -40,6 +42,9 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(f"Missing required data file: {db_path}")
     if not chroma_path.is_dir():
         raise RuntimeError(f"Missing required data directory: {chroma_path}")
+
+    # 3. Vector store integrity check — raises RuntimeError if collection won't load
+    check_vector_store()
 
     yield  # App is running
 

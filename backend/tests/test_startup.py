@@ -74,3 +74,39 @@ def test_startup_data_failure_chroma(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="Missing required data"):
         with TestClient(server.app, raise_server_exceptions=True):
             pass
+
+
+def test_startup_vector_store_load_failure(monkeypatch):
+    """Lifespan raises RuntimeError when check_vector_store raises a load failure.
+
+    Monkeypatches server.check_vector_store (in server's namespace) to simulate
+    chromadb collection failing to load. Keeps the test fully offline.
+    """
+    import server  # noqa: PLC0415
+
+    def fail_load():
+        raise RuntimeError("MMWR vector store failed to load")
+
+    monkeypatch.setattr("server.check_vector_store", fail_load)
+
+    with pytest.raises(RuntimeError, match="vector store"):
+        with TestClient(server.app, raise_server_exceptions=True):
+            pass
+
+
+def test_startup_vector_store_empty(monkeypatch):
+    """Lifespan raises RuntimeError when check_vector_store raises an empty-store error.
+
+    Monkeypatches server.check_vector_store (in server's namespace) to simulate
+    the collection loading but having zero documents. Keeps the test fully offline.
+    """
+    import server  # noqa: PLC0415
+
+    def fail_empty():
+        raise RuntimeError("MMWR vector store is empty")
+
+    monkeypatch.setattr("server.check_vector_store", fail_empty)
+
+    with pytest.raises(RuntimeError, match="vector store"):
+        with TestClient(server.app, raise_server_exceptions=True):
+            pass

@@ -97,6 +97,34 @@ def _get_chroma_collection():
 
 
 # ---------------------------------------------------------------------------
+# Public startup check — fail-fast vector store validation
+# ---------------------------------------------------------------------------
+
+
+def check_vector_store() -> None:
+    """Verify the MMWR ChromaDB collection is loadable and non-empty.
+
+    Called from the FastAPI lifespan handler so the server fails at boot
+    rather than on the first tool call.
+
+    Raises:
+        RuntimeError: If the collection cannot be loaded (chromadb missing,
+                      data/chroma_db absent, or collection not found), or if
+                      the collection loaded but contains zero documents.
+    """
+    collection = _get_chroma_collection()
+    if collection is None:
+        raise RuntimeError(
+            "MMWR vector store failed to load — check chromadb installation "
+            "and data/chroma_db/"
+        )
+    if collection.count() == 0:
+        raise RuntimeError(
+            "MMWR vector store is empty — run ingestion before starting the server"
+        )
+
+
+# ---------------------------------------------------------------------------
 # SQLite helper
 # ---------------------------------------------------------------------------
 

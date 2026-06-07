@@ -18,8 +18,11 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase D, item D1. Path from here:
-D1 → D2 → D3 → D4 → UI.
+**You are here →** Pre-D fixes, item PD2 (tools_used). Path from here:
+PD2 → Phase D (D1 → D2 → D3 → D4) → UI.
+
+C2 live check passed the contract (chat / artifact modes correct, real CDC PLACES
+statistics in payloads). Two findings surfaced, to clear before Docker:
 
 ---
 
@@ -83,6 +86,16 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
       `AskResponse` and the measures JSON come back. This is the first real
       end-to-end LLM call — confirms the contract holds against a live model.
 
+## Pre-D fixes (clear before Docker build)
+
+- [x] **PD1. chromadb missing → MMWR retrieval silently off.** Verify `chromadb`
+      is in `requirements.txt` at the right version; reinstall cleanly in the
+      venv; re-run an MMWR-flavored question to confirm `search_mmwr_reports`
+      actually returns passages (not the "vector DB not available" fallback).
+- [ ] **PD2. `meta.tools_used` always `[]`.** Populate it from the agent run
+      result (tool-call parts) so production telemetry is accurate. The parked
+      `# TODO: populate from agent result` in orchestrator.py.
+
 ## Phase D — Deploy to Railway
 
 - [ ] **D1. Dockerfile.railway builds locally** with `data/` baked in (db +
@@ -108,6 +121,12 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Pre-D PD1 complete. chromadb==1.5.8 was in requirements.txt but
+  uninstalled (venv out of sync); sentence-transformers also missing — both now
+  installed. tools.py: check_vector_store() added (fails-fast on None or count=0).
+  server.py lifespan: step 3 calls check_vector_store(). test_startup.py: 4→6 tests.
+  Live verify: search_mmwr_reports returns real passages (source PDFs, relevance
+  scores) for COVID vaccination queries. 41 tests green.
 - 2026-06-07 — Phase C2 complete. scripts/demo_run_ask.py: 3 live calls, all
   correct modes. Greeting → chat. Travis County diabetes → artifact, 2 CDC PLACES
   stats (9.0% crude, 9.5% age-adj). Cook/Harris obesity → artifact, 4 stats.
