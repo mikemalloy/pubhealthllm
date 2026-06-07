@@ -1,3 +1,0 @@
-backend/data/healthgpt.db filter=lfs diff=lfs merge=lfs -text
-backend/data/chroma_db/** filter=lfs diff=lfs merge=lfs -text
-backend/data/mmwr_pdfs/** filter=lfs diff=lfs merge=lfs -text
