@@ -15,10 +15,14 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # fill in ANTHROPIC_API_KEY + Clerk keys
-uvicorn server:app --reload
+uvicorn server:app --reload --port 8000
 ```
 
 Health check: `curl http://localhost:8000/health`
+
+The lifespan hook validates model config and confirms `data/healthgpt.db` and
+`data/chroma_db/` exist before the server accepts requests. Startup will fail
+immediately if either is missing — check your `.env` and data directory.
 
 ## Running tests
 
@@ -35,7 +39,7 @@ See `docs/plans/2026-06-04-scaffold-backend.md` for the scaffolding plan.
 
 - `backend/pubhealth_llm/` — lifted engine: PydanticAI agent, 8 tools, schemas, ingestion
 - `backend/data/` — baked-in: healthgpt.db (CDC PLACES + mortality), chroma_db (MMWR)
-- `backend/server.py` — FastAPI; `/health` (public), `/ask` (Clerk, coming next)
+- `backend/server.py` — FastAPI; `/health` (public), `/ask` + `/measures` (Clerk-gated)
 - `frontend/` — deferred (Next.js 16 / shadcn / Clerk)
 - `terraform/` — AWS App Runner + ECR reference (not deployed)
 

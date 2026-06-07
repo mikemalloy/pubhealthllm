@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase C, item C1. Path from here:
-C1 → C2 → Phase D (Railway) → UI.
+**You are here →** Phase C, item C2. Path from here:
+C2 → Phase D (Railway) → UI.
 
 ---
 
@@ -76,7 +76,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Phase C — Run locally (verify before deploy)
 
-- [ ] **C1. Boot + smoke.** `uvicorn server:app` starts clean; `GET /health` →
+- [x] **C1. Boot + smoke.** `uvicorn server:app` starts clean; `GET /health` →
       200. Document the exact run command in README.
 - [ ] **C2. Live API check.** With real `ANTHROPIC_API_KEY` + Clerk env set, hit
       `/ask` and `/measures` with a valid token (curl/httpx) and confirm a real
@@ -108,6 +108,10 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Phase C1 complete. uvicorn server:app --reload --port 8000 boots
+  clean; lifespan passed (validate_model_config OK, healthgpt.db + chroma_db found);
+  GET /health → 200 {"status":"ok","version":"0.1.0","data":{...}}. README updated
+  with exact run command and lifespan note.
 - 2026-06-07 — Phase B6 complete. test_ask.py: +2 artifact-mode tests asserting
   mode/artifact shape differs between chat and artifact envelopes. test_auth.py:
   +2 _get_clerk_bearer tests using monkeypatch (no manual try/finally); removed
