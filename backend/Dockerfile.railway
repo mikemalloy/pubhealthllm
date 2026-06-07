@@ -2,12 +2,13 @@
 # Railway deployment: build context is backend/ directory.
 # Do NOT use for AWS — use backend/Dockerfile (project-root context) for that.
 #
-# Key difference from Drug Discovery template:
-#   - No HuggingFace model download layer (no ML model to pull)
-#   - data/ directory is BAKED INTO the image (healthgpt.db + chroma_db)
-#     so there is zero cold-start download delay at runtime.
-#   - TODO: bump memory to 2-4 GB in Railway settings (sentence-transformers
-#     + ChromaDB need headroom; Drug Discovery used 3 GB for PyTorch).
+# Key properties:
+#   - data/ is BAKED IN (healthgpt.db + chroma_db) — zero cold-start download.
+#   - all-MiniLM-L6-v2 is PRE-DOWNLOADED at build time so startup validation
+#     (check_vector_store) works fully offline at boot.
+#   - $PORT is respected at runtime (Railway injects it; default 8000 locally).
+#   - NOTE: bump memory to 2-4 GB in Railway settings — sentence-transformers
+#     + ChromaDB need headroom.
 
 FROM python:3.11-slim
 
@@ -18,25 +19,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies (split layer for better caching)
+# Install Python dependencies (split layer for better caching)
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r /tmp/requirements.txt
 
+# Pre-download the sentence-transformer embedding model used by ChromaDB/MMWR.
+# Baking it into an image layer means the B5/PD1 startup check (check_vector_store)
+# can load the Chroma collection fully offline at container boot — no runtime download.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
 # Bake application source
-# TODO: update COPY list when new modules are added (e.g. rate_limiter.py)
 COPY server.py /app/
 
 # Bake engine package
 COPY pubhealth_llm/ /app/pubhealth_llm/
 
-# Bake data artifacts (healthgpt.db ~84MB, chroma_db ~3.3MB)
-# These are built once during ingestion and committed via Git LFS.
-# TODO: if data grows beyond ~500MB, move to a Railway volume mount instead.
+# Bake data artifacts (healthgpt.db ~69MB, chroma_db ~3MB, mmwr_pdfs ~3.5MB)
+# Built during ingestion, committed via Git LFS.
+# If data grows beyond ~500MB consider a Railway volume mount instead.
 COPY data/ /app/data/
 
 EXPOSE 8000
 
-# TODO: increase --workers to 2 once memory budget is confirmed
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# $PORT is injected by Railway at runtime; default to 8000 for local docker run.
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

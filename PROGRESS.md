@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase D, item D1. Path from here:
-D1 → D2 → D3 → D4 → UI.
+**You are here →** Phase D, item D2. Path from here:
+D2 → D3 → D4 → UI.
 
 C2 live check passed the contract (chat / artifact modes correct, real CDC PLACES
 statistics in payloads). Two findings surfaced, to clear before Docker:
@@ -98,7 +98,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Phase D — Deploy to Railway
 
-- [ ] **D1. Dockerfile.railway builds locally** with `data/` baked in (db +
+- [x] **D1. Dockerfile.railway builds locally** with `data/` baked in (db +
       chroma); image runs and serves `/health`.
 - [ ] **D2. Railway service** created; env vars set (`ANTHROPIC_API_KEY`,
       `CLERK_JWKS_URL`, `PUBHEALTH_MODEL`, any Clerk secret); deploy succeeds.
@@ -121,6 +121,11 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Phase D1 complete. Dockerfile.railway: added all-MiniLM-L6-v2 model
+  pre-bake layer (offline at boot), $PORT support, JSON CMD form. Created .dockerignore
+  (excludes .venv 1.5GB, __pycache__, .env, scripts/; keeps data/). Image 3.32GB,
+  build 2:41. Boot: startup validation passed (validate_model_config + healthgpt.db +
+  chroma_db is_dir + check_vector_store all green). GET /health → 200.
 - 2026-06-07 — Pre-D PD2 complete. agent.py: AgentResult dataclass + _extract_tools_used()
   iterates new_messages(), collects ToolCallPart.tool_name, excludes _output_tool_name
   ("final_result"), dedupes preserving order. run_agent returns AgentResult. orchestrator:

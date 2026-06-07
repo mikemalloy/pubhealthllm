@@ -1,0 +1,32 @@
+# Virtual environment — never goes in the image
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Test / dev artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+*.egg-info/
+
+# Editor and OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local secrets — env is passed at runtime via --env-file / Railway env vars
+.env
+
+# Git
+.git/
+.gitattributes
+
+# Scripts are dev-only helpers, not needed at runtime
+scripts/
+
+# data/ is intentionally NOT excluded — it is baked into the image
