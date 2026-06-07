@@ -121,6 +121,10 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Phase D2 (partial): railway.json added (builder=DOCKERFILE,
+  dockerfilePath=Dockerfile.railway). LFS confirmed: healthgpt.db, chroma_db
+  (4 files), mmwr_pdfs (9 PDFs) — all real objects (* marker, not pointers).
+  D2 checkbox stays open until Railway deploy succeeds.
 - 2026-06-07 — Phase D1 complete. Dockerfile.railway: added all-MiniLM-L6-v2 model
   pre-bake layer (offline at boot), $PORT support, JSON CMD form. Created .dockerignore
   (excludes .venv 1.5GB, __pycache__, .env, scripts/; keeps data/). Image 3.32GB,
