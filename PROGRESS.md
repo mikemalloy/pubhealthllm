@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Pre-D fixes, item PD2 (tools_used). Path from here:
-PD2 → Phase D (D1 → D2 → D3 → D4) → UI.
+**You are here →** Phase D, item D1. Path from here:
+D1 → D2 → D3 → D4 → UI.
 
 C2 live check passed the contract (chat / artifact modes correct, real CDC PLACES
 statistics in payloads). Two findings surfaced, to clear before Docker:
@@ -92,7 +92,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
       is in `requirements.txt` at the right version; reinstall cleanly in the
       venv; re-run an MMWR-flavored question to confirm `search_mmwr_reports`
       actually returns passages (not the "vector DB not available" fallback).
-- [ ] **PD2. `meta.tools_used` always `[]`.** Populate it from the agent run
+- [x] **PD2. `meta.tools_used` always `[]`.** Populate it from the agent run
       result (tool-call parts) so production telemetry is accurate. The parked
       `# TODO: populate from agent result` in orchestrator.py.
 
@@ -121,6 +121,12 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Pre-D PD2 complete. agent.py: AgentResult dataclass + _extract_tools_used()
+  iterates new_messages(), collects ToolCallPart.tool_name, excludes _output_tool_name
+  ("final_result"), dedupes preserving order. run_agent returns AgentResult. orchestrator:
+  unpacks agent_result.response + agent_result.tools_used; Meta.tools_used populated for
+  both artifact and chat paths. New test file test_agent_tools_extraction.py (3 tests);
+  test_orchestrator.py 11→13. All callers updated (smoke + integration tests). 25 green.
 - 2026-06-07 — Pre-D PD1 complete. chromadb==1.5.8 was in requirements.txt but
   uninstalled (venv out of sync); sentence-transformers also missing — both now
   installed. tools.py: check_vector_store() added (fails-fast on None or count=0).

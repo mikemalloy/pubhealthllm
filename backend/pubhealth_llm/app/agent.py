@@ -18,10 +18,12 @@ Usage:
 import datetime
 import logging
 import os
+from dataclasses import dataclass
 from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
@@ -364,6 +366,44 @@ def _log_query(question: str, response_summary: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Result type and tool extraction
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AgentResult:
+    """Result returned by run_agent, bundling the structured response and tool telemetry."""
+    response: PublicHealthResponse
+    tools_used: list[str]
+
+
+def _extract_tools_used(result) -> list[str]:
+    """Extract unique domain tool names from an AgentRunResult, excluding the synthetic output tool.
+
+    Args:
+        result: An AgentRunResult (or compatible object with new_messages() and _output_tool_name).
+
+    Returns:
+        Deduplicated list of tool names in first-occurrence order, excluding the output tool.
+    """
+    # _output_tool_name is a private PydanticAI attribute (pydantic-ai 1.86.0).
+    # It holds the name of the synthetic structured-output tool ("final_result").
+    # Verify on pydantic-ai upgrades: pydantic_ai._output.DEFAULT_OUTPUT_TOOL_NAME.
+    output_tool_name = result._output_tool_name
+    seen: set[str] = set()
+    tools: list[str] = []
+    for msg in result.new_messages():
+        if isinstance(msg, ModelResponse):
+            for part in msg.parts:
+                if isinstance(part, ToolCallPart):
+                    name = part.tool_name
+                    if name != output_tool_name and name not in seen:
+                        seen.add(name)
+                        tools.append(name)
+    return tools
+
+
+# ---------------------------------------------------------------------------
 # Public interface
 # ---------------------------------------------------------------------------
 
@@ -372,13 +412,14 @@ async def run_agent(
     question: str,
     message_history: Optional[list] = None,
     model: Optional[str] = None,
-) -> PublicHealthResponse:
+) -> AgentResult:
     """
     Run the pubHealthLLM agent on a user question.
 
     This is the primary entry point called by the FastAPI interface.
     It runs the PydanticAI agent, which calls tools as needed and
-    returns a structured PublicHealthResponse.
+    returns an AgentResult bundling the structured PublicHealthResponse
+    with the list of domain tools actually called during the run.
 
     Args:
         question:        The user's natural language question.
@@ -389,8 +430,9 @@ async def run_agent(
                          "anthropic:claude-sonnet-4-6" if that var is unset.
 
     Returns:
-        A validated PublicHealthResponse with summary, evidence,
-        statistics, historical context, and citations.
+        AgentResult with a validated PublicHealthResponse (summary, evidence,
+        statistics, historical context, citations) and the list of domain
+        tool names invoked during the run.
 
     Raises:
         Exception: Propagated from PydanticAI on fatal errors.
@@ -406,21 +448,25 @@ async def run_agent(
             message_history=message_history or [],
         )
         response: PublicHealthResponse = result.output
+        tools_used = _extract_tools_used(result)
         _log_query(question, response.summary[:200])
-        return response
+        return AgentResult(response=response, tools_used=tools_used)
 
     except Exception as exc:
         logger.error("Agent run failed: %s", exc, exc_info=True)
         # Return a structured error response rather than raising
-        return PublicHealthResponse(
-            summary=(
-                "I encountered an error while processing your question. "
-                "Please try rephrasing or check that the data pipeline has been run."
+        return AgentResult(
+            response=PublicHealthResponse(
+                summary=(
+                    "I encountered an error while processing your question. "
+                    "Please try rephrasing or check that the data pipeline has been run."
+                ),
+                evidence=[f"Error details: {str(exc)[:300]}"],
+                caveats=[
+                    "The data ingestion pipeline may not have been run yet.",
+                    "Check that the required API key for the selected model is set in your .env file.",
+                ],
+                sources=["No data retrieved due to error."],
             ),
-            evidence=[f"Error details: {str(exc)[:300]}"],
-            caveats=[
-                "The data ingestion pipeline may not have been run yet.",
-                "Check that the required API key for the selected model is set in your .env file.",
-            ],
-            sources=["No data retrieved due to error."],
+            tools_used=[],
         )

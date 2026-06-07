@@ -26,13 +26,17 @@ def test_run_agent_smoke(_anthropic_api_key):
     One real run_agent() call. Asserts a valid PublicHealthResponse is returned.
     This is the tripwire after a model swap — if this fails, the model config is broken.
     """
-    from pubhealth_llm.app.agent import run_agent
+    from pubhealth_llm.app.agent import run_agent, AgentResult
     from pubhealth_llm.app.schemas import PublicHealthResponse
 
-    response = asyncio.run(
+    agent_result = asyncio.run(
         run_agent("What is the obesity rate in Travis County, TX?")
     )
 
+    assert isinstance(agent_result, AgentResult), (
+        f"Expected AgentResult, got {type(agent_result)}"
+    )
+    response = agent_result.response
     assert isinstance(response, PublicHealthResponse), (
         f"Expected PublicHealthResponse, got {type(response)}"
     )

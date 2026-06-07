@@ -17,6 +17,7 @@ from pubhealth_llm.app.schemas import (
     StatisticEntry,
 )
 from pubhealth_llm.app.orchestrator import run_ask
+from pubhealth_llm.app.agent import AgentResult
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -55,7 +56,7 @@ _THIN_PHR = PublicHealthResponse(
 async def test_run_ask_rich_phr_returns_artifact_mode():
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
-        new=AsyncMock(return_value=_RICH_PHR),
+        new=AsyncMock(return_value=AgentResult(response=_RICH_PHR, tools_used=[])),
     ):
         response = await run_ask("What is the diabetes rate in Travis County, TX?")
 
@@ -73,7 +74,7 @@ async def test_run_ask_rich_phr_returns_artifact_mode():
 async def test_run_ask_thin_phr_returns_chat_mode():
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
-        new=AsyncMock(return_value=_THIN_PHR),
+        new=AsyncMock(return_value=AgentResult(response=_THIN_PHR, tools_used=[])),
     ):
         response = await run_ask("What can you do?")
 
@@ -88,7 +89,7 @@ async def test_run_ask_thin_phr_returns_chat_mode():
 
 
 async def test_run_ask_calls_run_agent_exactly_once():
-    run_agent_mock = AsyncMock(return_value=_RICH_PHR)
+    run_agent_mock = AsyncMock(return_value=AgentResult(response=_RICH_PHR, tools_used=[]))
     with patch("pubhealth_llm.app.orchestrator.run_agent", run_agent_mock):
         await run_ask("Travis County diabetes stats")
 
@@ -105,7 +106,7 @@ async def test_run_ask_never_calls_plan_request_or_run_responder():
     run_responder_mock = AsyncMock()
 
     with (
-        patch("pubhealth_llm.app.orchestrator.run_agent", new=AsyncMock(return_value=_RICH_PHR)),
+        patch("pubhealth_llm.app.orchestrator.run_agent", new=AsyncMock(return_value=AgentResult(response=_RICH_PHR, tools_used=[]))),
         patch("pubhealth_llm.app.planner.plan_request", plan_request_mock),
         patch("pubhealth_llm.app.responder.run_responder", run_responder_mock),
     ):
@@ -139,7 +140,7 @@ async def test_run_ask_graceful_fallback_on_agent_error():
 
 
 async def test_run_ask_forwards_message_history_to_run_agent():
-    run_agent_mock = AsyncMock(return_value=_RICH_PHR)
+    run_agent_mock = AsyncMock(return_value=AgentResult(response=_RICH_PHR, tools_used=[]))
     history = [{"role": "user", "content": "prior turn"}]
 
     with patch("pubhealth_llm.app.orchestrator.run_agent", run_agent_mock):
@@ -156,7 +157,7 @@ async def test_run_ask_forwards_message_history_to_run_agent():
 async def test_run_ask_artifact_title_is_non_empty_string():
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
-        new=AsyncMock(return_value=_RICH_PHR),
+        new=AsyncMock(return_value=AgentResult(response=_RICH_PHR, tools_used=[])),
     ):
         response = await run_ask("Travis County diabetes")
 
@@ -189,7 +190,7 @@ async def test_run_ask_artifact_chat_message_is_teaser_when_summary_long():
     )
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
-        new=AsyncMock(return_value=long_phr),
+        new=AsyncMock(return_value=AgentResult(response=long_phr, tools_used=[])),
     ):
         response = await run_ask("Long summary question")
 
@@ -205,7 +206,7 @@ async def test_run_ask_artifact_chat_message_is_teaser_when_summary_long():
 async def test_run_ask_meta_timing_ms_is_non_negative():
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
-        new=AsyncMock(return_value=_THIN_PHR),
+        new=AsyncMock(return_value=AgentResult(response=_THIN_PHR, tools_used=[])),
     ):
         response = await run_ask("Hello")
 
@@ -220,7 +221,7 @@ async def test_run_ask_meta_timing_ms_is_non_negative():
 async def test_run_ask_meta_model_is_non_empty():
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
-        new=AsyncMock(return_value=_THIN_PHR),
+        new=AsyncMock(return_value=AgentResult(response=_THIN_PHR, tools_used=[])),
     ):
         response = await run_ask("Any question")
 
@@ -236,8 +237,43 @@ async def test_run_ask_meta_model_is_non_empty():
 async def test_run_ask_returns_ask_response_instance():
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
-        new=AsyncMock(return_value=_THIN_PHR),
+        new=AsyncMock(return_value=AgentResult(response=_THIN_PHR, tools_used=[])),
     ):
         response = await run_ask("Q")
 
     assert isinstance(response, AskResponse)
+
+
+# ---------------------------------------------------------------------------
+# Test 12 — tools_used populated from AgentResult when present
+# ---------------------------------------------------------------------------
+
+
+async def test_run_ask_rich_phr_tools_used_populated():
+    with patch(
+        "pubhealth_llm.app.orchestrator.run_agent",
+        new=AsyncMock(
+            return_value=AgentResult(
+                response=_RICH_PHR,
+                tools_used=["tool_get_health_statistics"],
+            )
+        ),
+    ):
+        response = await run_ask("What is the diabetes rate in Travis County, TX?")
+
+    assert response.meta.tools_used == ["tool_get_health_statistics"]
+
+
+# ---------------------------------------------------------------------------
+# Test 13 — tools_used empty when AgentResult has no tools
+# ---------------------------------------------------------------------------
+
+
+async def test_run_ask_thin_phr_tools_used_empty():
+    with patch(
+        "pubhealth_llm.app.orchestrator.run_agent",
+        new=AsyncMock(return_value=AgentResult(response=_THIN_PHR, tools_used=[])),
+    ):
+        response = await run_ask("What can you do?")
+
+    assert response.meta.tools_used == []

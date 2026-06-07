@@ -102,7 +102,7 @@ async def test_agent_uses_composite_tool_for_multidimensional_question(
     This test accepts either strategy (composite OR ≥2 individual calls)
     and rejects the old failure mode of doing nothing beyond one MMWR search.
     """
-    from pubhealth_llm.app.agent import run_agent
+    from pubhealth_llm.app.agent import run_agent, AgentResult
     import pubhealth_llm.app.agent as agent_module
 
     tool_calls_made = []
@@ -146,7 +146,7 @@ async def test_agent_uses_composite_tool_for_multidimensional_question(
         patch.object(agent_module, "get_available_measures", tracking_measures),
         patch.object(agent_module, "rank_counties_composite", tracking_composite),
     ):
-        response = await run_agent(
+        agent_result = await run_agent(
             "Which 3 counties in Texas should I prioritize for a diabetes prevention "
             "program? Base your answer on diabetes prevalence, obesity rates, and "
             "physical inactivity levels."
@@ -170,6 +170,7 @@ async def test_agent_uses_composite_tool_for_multidimensional_question(
     )
 
     # Verify the response is substantive
+    response = agent_result.response
     assert response.summary, "Response summary is empty"
     assert len(response.evidence) >= 1, "Response has no evidence items"
 
@@ -182,9 +183,10 @@ async def test_agent_response_contains_county_names(anthropic_api_key, db_path, 
     """
     from pubhealth_llm.app.agent import run_agent
 
-    response = await run_agent(
+    agent_result = await run_agent(
         "Which counties in Texas have the highest diabetes rates? Give me the top 3."
     )
+    response = agent_result.response
 
     full_text = (
         response.summary
@@ -207,9 +209,10 @@ async def test_agent_response_has_statistics(anthropic_api_key, db_path, chroma_
     """
     from pubhealth_llm.app.agent import run_agent
 
-    response = await run_agent(
+    agent_result = await run_agent(
         "What is the obesity rate in Travis County, TX?"
     )
+    response = agent_result.response
 
     assert response.summary, "Summary is empty"
 
@@ -232,9 +235,10 @@ async def test_agent_never_fabricates_when_db_empty(anthropic_api_key):
     """
     from pubhealth_llm.app.agent import run_agent
 
-    response = await run_agent(
+    agent_result = await run_agent(
         "What is the diabetes rate in Nonexistent County, ZZ?"
     )
+    response = agent_result.response
 
     # Should not have statistics entries with fabricated values
     # The summary should acknowledge unavailability or error

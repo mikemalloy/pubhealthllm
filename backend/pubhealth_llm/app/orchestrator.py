@@ -77,7 +77,7 @@ async def run_ask(
     start_ms = int(time.monotonic() * 1000)
 
     try:
-        result = await run_agent(question, message_history=message_history)
+        agent_result = await run_agent(question, message_history=message_history)
     except Exception as exc:
         logger.error("Agent failed (%s), returning apologetic chat response", exc)
         timing_ms = int(time.monotonic() * 1000) - start_ms
@@ -96,6 +96,8 @@ async def run_ask(
             ),
         )
 
+    result = agent_result.response
+    tools_used = agent_result.tools_used
     timing_ms = int(time.monotonic() * 1000) - start_ms
 
     if _is_report_worthy(result):
@@ -112,7 +114,7 @@ async def run_ask(
             ),
             meta=Meta(
                 intent=question[:200],
-                tools_used=[],
+                tools_used=tools_used,
                 model=config.get_model(),
                 timing_ms=timing_ms,
             ),
@@ -124,7 +126,7 @@ async def run_ask(
             artifact=None,
             meta=Meta(
                 intent=question[:200],
-                tools_used=[],
+                tools_used=tools_used,
                 model=config.get_model(),
                 timing_ms=timing_ms,
             ),
