@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E2. Backend is DONE:
+**You are here →** Phase E, item E3. Backend is DONE:
 deployed to Railway, auth enforced, live `/ask` returns real data with
 `tools_used` populated. Path: E1 → E2 → E3 → E4 → E5 → E6 (Vercel). UI framework
 only this phase — NO pubHealth data hookup yet.
@@ -127,7 +127,7 @@ style: `bg-primary-foreground p-4 rounded-lg`.
       the placeholder). Remove the template's own `.git`/workspace artifacts,
       rename in `package.json`. `pnpm install && pnpm dev` renders the template
       unchanged. Commit a known-good baseline BEFORE modifying.
-- [ ] **E2. Strip + rebrand the sidebar.** Header label → "PubHealth". Keep ONLY
+- [x] **E2. Strip + rebrand the sidebar.** Header label → "PubHealth". Keep ONLY
       the Application group; delete Projects, Collapsible Group, Nested Items.
       Application items become: Home (`/`, home icon) and "Pub Health LLM"
       (`/llm`, `message-square` lucide icon). Keep `collapsible="icon"` + the
@@ -169,6 +169,12 @@ style: `bg-primary-foreground p-4 rounded-lg`.
 
 ## Session log (newest first)
 
+- 2026-06-07 — Phase E2 complete. AppSidebar.tsx rewritten: brand "Lama Dev"
+  → "PubHealth" (logo.svg kept), Application group trimmed to Home (/) +
+  Pub Health LLM (/llm, MessageSquare icon), Projects/Collapsible/Nested
+  groups deleted, SidebarFooter "John Doe" kept as-is. Deleted demo routes
+  (payments/, users/) + EditUser.tsx + TablePagination.tsx (only used by
+  those routes). pnpm build clean, 2 routes (/ + /_not-found), no warnings.
 - 2026-06-07 — Phase E1 complete. Copied shadcn template into frontend/
   (excluded node_modules, .next, .git, pnpm-workspace.yaml). Renamed
   package.json "name" to "pubhealth-frontend". Added .npmrc with
