@@ -1,12 +1,14 @@
 """
-Tests for auth coverage — Phase B3.
+Tests for auth coverage — Phase B3 + B6.
 
 Verifies:
   - /health is public (no guard, always 200)
   - /ask requires auth (guarded: 401/403 without credentials)
   - /measures requires auth (guarded: 401/403 without credentials)
   - existing authed requests still work under the override
+  - _get_clerk_bearer singleton initialises (with and without CLERK_JWKS_URL)
 """
+import os
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -83,5 +85,37 @@ def test_measures_requires_auth(client, no_auth):
     """GET /measures must return 401/403 when credentials are absent."""
     resp = client.get("/measures")
     assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _get_clerk_bearer singleton (Phase B6 coverage)
+# ---------------------------------------------------------------------------
+
+def test_get_clerk_bearer_with_jwks_url(monkeypatch):
+    """_get_clerk_bearer creates a ClerkHTTPBearer when CLERK_JWKS_URL is set."""
+    import server
+    monkeypatch.setattr(server, "_clerk_bearer", None)
+    monkeypatch.setenv("CLERK_JWKS_URL", "https://example.clerk.accounts.dev/.well-known/jwks.json")
+    from server import _get_clerk_bearer
+    from fastapi_clerk_auth import ClerkHTTPBearer
+    bearer = _get_clerk_bearer()
+    assert isinstance(bearer, ClerkHTTPBearer)
+    # Second call returns the cached singleton (no re-init)
+    bearer2 = _get_clerk_bearer()
+    assert bearer is bearer2
+
+
+def test_get_clerk_bearer_missing_jwks_url_logs_warning(monkeypatch, caplog):
+    """_get_clerk_bearer logs a warning when CLERK_JWKS_URL is absent."""
+    import logging
+    import server
+    monkeypatch.setattr(server, "_clerk_bearer", None)
+    monkeypatch.delenv("CLERK_JWKS_URL", raising=False)
+    from server import _get_clerk_bearer
+    from fastapi_clerk_auth import ClerkHTTPBearer
+    with caplog.at_level(logging.WARNING, logger="server"):
+        bearer = _get_clerk_bearer()
+    assert isinstance(bearer, ClerkHTTPBearer)
+    assert any("CLERK_JWKS_URL" in r.message for r in caplog.records)
 
 

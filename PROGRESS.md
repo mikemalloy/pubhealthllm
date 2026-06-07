@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase B, item B6 (B4 deferred to hardening). Path from here:
-B6 → Phase C (run locally) → Phase D (Railway) → UI.
+**You are here →** Phase C, item C1. Path from here:
+C1 → C2 → Phase D (Railway) → UI.
 
 ---
 
@@ -69,7 +69,7 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
       now. Leave a `# TODO: rate limit — see hardening` comment on `/ask`.
 - [x] **B5. Fail-fast startup validation.** Call `validate_model_config()` in a
       FastAPI lifespan hook; assert `data/` files exist. Bad config fails at boot.
-- [ ] **B6. HTTP tests.** `/ask` happy path (mock `run_ask`), `/ask` 401 without
+- [x] **B6. HTTP tests.** `/ask` happy path (mock `run_ask`), `/ask` 401 without
       token, `/measures`. (Rate-limit test dropped with B4.)
 
 ---
@@ -108,6 +108,11 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
 
 ## Session log (newest first)
 
+- 2026-06-07 — Phase B6 complete. test_ask.py: +2 artifact-mode tests asserting
+  mode/artifact shape differs between chat and artifact envelopes. test_auth.py:
+  +2 _get_clerk_bearer tests using monkeypatch (no manual try/finally); removed
+  fragile clerk_guard unit test and _reset_clerk_singleton helper. server.py 98%
+  coverage (1 miss: clerk_guard body, unreachable without real Clerk). 39 tests green.
 - 2026-06-06 — Phase B5 complete. lifespan handler in server.py: validate_model_config()
   first, then is_dir() check on chroma_db (not just exists()), then exists() on healthgpt.db.
   test_startup.py: 4 tests (success, model-failure, db-failure, chroma-failure). Quality
