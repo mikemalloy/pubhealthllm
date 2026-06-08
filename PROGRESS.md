@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E4 (inset shell). E1+E2 done. Backend is DONE
+**You are here →** Phase E, item E5a (di4health Home — shell, hero, copy). E1+E2 done. Backend is DONE
 (Railway, auth, live `/ask`). Path: E3 (rebrand) → E4 (inset shell) → E5a/E5b
 (di4health Home) → E6 (figures) → E7 (/llm + Clerk) → E8 (verify) → E9 (Vercel).
 UI only — NO pubHealth data hookup yet.
@@ -151,7 +151,7 @@ clear attribution to di4health / TEAM Public Health throughout.
       `<title>`/metadata; any user-facing app name. Keep nav items (Home, Pub
       Health LLM). Mechanical pass; build stays green. (Frontend only — backend
       untouched per CLAUDE.md rule 4.)
-- [ ] **E4. Inset shell.** Add `variant="inset"` to the sidebar + wrap content in
+- [x] **E4. Inset shell.** Add `variant="inset"` to the sidebar + wrap content in
       `<SidebarInset>`; replace the plain Navbar with the inset header pattern
       (SidebarTrigger + breadcrumb left; Dashboard link + theme toggle + static
       avatar right). Confirm the floating rounded-card look + theme + collapse.
@@ -202,6 +202,12 @@ clear attribution to di4health / TEAM Public Health throughout.
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase E4 complete. AppSidebar: variant prop added, passed
+  "inset" from layout.tsx. Navbar.tsx replaced by SiteHeader.tsx: left =
+  SidebarTrigger + Separator + Breadcrumb (di4health / page); right =
+  Dashboard link + theme toggle + static avatar (unchanged behavior).
+  layout.tsx: body flex removed, <main> → <SidebarInset>, Navbar →
+  SiteHeader. pnpm build clean, 2 routes.
 - 2026-06-08 — Phase E3 complete. AppSidebar brand "PubHealth" → "di4health";
   layout.tsx metadata title → "di4health — Decision Intelligence 4 Health",
   description updated. No other user-facing brand strings found. pnpm build

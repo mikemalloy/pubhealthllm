@@ -34,9 +34,9 @@ const items = [
   },
 ];
 
-const AppSidebar = () => {
+const AppSidebar = ({ variant }: { variant?: "sidebar" | "floating" | "inset" }) => {
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" variant={variant}>
       <SidebarHeader className="py-4">
         <SidebarMenu>
           <SidebarMenuItem>

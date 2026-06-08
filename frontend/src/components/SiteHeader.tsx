@@ -2,7 +2,17 @@
 
 import { LogOut, Moon, Settings, Sun, User } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "./ui/breadcrumb";
+import { Button } from "./ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,24 +21,52 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { Button } from "./ui/button";
-import { useTheme } from "next-themes";
+import { Separator } from "./ui/separator";
 import { SidebarTrigger } from "./ui/sidebar";
+import { useTheme } from "next-themes";
 
-const Navbar = () => {
+const PAGE_LABELS: Record<string, string> = {
+  "/": "Home",
+  "/llm": "Pub Health LLM",
+};
+
+const SiteHeader = () => {
   const { setTheme } = useTheme();
+  const pathname = usePathname();
+  const pageLabel = PAGE_LABELS[pathname] ?? pathname.replace("/", "");
 
   return (
-    <nav className="p-4 flex items-center justify-between sticky top-0 bg-background z-10">
-      {/* LEFT */}
-      <SidebarTrigger />
-      {/* <Button variant="outline" onClick={toggleSidebar}>
-        Custom Button
-      </Button> */}
-      {/* RIGHT */}
-      <div className="flex items-center gap-4">
-        <Link href="/">Dashboard</Link>
-        {/* THEME MENU */}
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+      {/* LEFT: trigger + separator + breadcrumb */}
+      <div className="flex items-center gap-2">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mr-2 h-4" />
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem className="hidden md:block">
+              <BreadcrumbLink asChild>
+                <Link href="/">di4health</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            {pageLabel !== "Home" && (
+              <>
+                <BreadcrumbSeparator className="hidden md:block" />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            )}
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
+
+      {/* RIGHT: Dashboard link + theme toggle + avatar */}
+      <div className="ml-auto flex items-center gap-4">
+        <Link href="/" className="text-sm font-medium hover:underline hidden sm:block">
+          Dashboard
+        </Link>
+
+        {/* THEME TOGGLE */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon">
@@ -49,7 +87,8 @@ const Navbar = () => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* USER MENU */}
+
+        {/* STATIC AVATAR (replaced by Clerk in E7) */}
         <DropdownMenu>
           <DropdownMenuTrigger>
             <Avatar>
@@ -75,8 +114,8 @@ const Navbar = () => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </nav>
+    </header>
   );
 };
 
-export default Navbar;
+export default SiteHeader;
