@@ -17,6 +17,37 @@ logger = logging.getLogger(__name__)
 
 _DATA_DIR = Path(__file__).parent / "data"
 
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
+
+def get_cors_origins() -> list[str]:
+    """Return the list of allowed CORS origins.
+
+    Always includes the two localhost defaults. If the ``CORS_ORIGINS``
+    environment variable is set it is treated as a comma-separated list of
+    additional origins; each entry is stripped of surrounding whitespace.
+    Duplicate origins are removed while preserving order (defaults first).
+
+    The env var is read at call time so tests can monkeypatch ``os.environ``.
+
+    Example::
+
+        CORS_ORIGINS="https://myapp.vercel.app, http://localhost:3000"
+        # → ["http://localhost:3000", "http://localhost:5173",
+        #     "https://myapp.vercel.app"]
+    """
+    origins: list[str] = list(_DEFAULT_CORS_ORIGINS)
+    extra = os.environ.get("CORS_ORIGINS", "")
+    if extra:
+        for origin in extra.split(","):
+            stripped = origin.strip()
+            if stripped and stripped not in origins:
+                origins.append(stripped)
+    return origins
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,13 +82,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="pubHealthLLM API", version="0.1.0", lifespan=lifespan)
 
-# CORS — localhost only for now; update with real origins at deploy time
+# CORS — defaults to localhost; extend via CORS_ORIGINS env var at deploy time
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-    ],
+    allow_origins=get_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
