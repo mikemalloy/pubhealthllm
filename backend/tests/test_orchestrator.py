@@ -286,6 +286,8 @@ async def test_run_ask_thin_phr_tools_used_empty():
 
 async def test_run_ask_artifact_markdown_equals_phr_to_markdown():
     """Artifact mode: artifact.markdown must equal result.to_markdown()."""
+    expected_markdown = _RICH_PHR.to_markdown()
+
     with patch(
         "pubhealth_llm.app.orchestrator.run_agent",
         new=AsyncMock(return_value=AgentResult(response=_RICH_PHR, tools_used=[])),
@@ -294,7 +296,7 @@ async def test_run_ask_artifact_markdown_equals_phr_to_markdown():
 
     assert response.mode == "artifact"
     assert response.artifact is not None
-    assert response.artifact.markdown == _RICH_PHR.to_markdown()
+    assert response.artifact.markdown == expected_markdown
 
 
 # ---------------------------------------------------------------------------

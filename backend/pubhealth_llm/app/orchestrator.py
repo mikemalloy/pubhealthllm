@@ -104,6 +104,12 @@ async def run_ask(
         summary = result.summary
         teaser = (summary[:_TEASER_LENGTH] + "…" if len(summary) > _TEASER_LENGTH else summary) or "No summary available."
         title = (summary[:_TITLE_LENGTH].rstrip() if len(summary) > _TITLE_LENGTH else summary) or "No summary available."
+        try:
+            rendered_markdown = result.to_markdown()
+        except Exception:
+            logger.warning("to_markdown() failed; markdown field will be None")
+            rendered_markdown = None
+
         return AskResponse(
             mode="artifact",
             chat_message=teaser,
@@ -111,7 +117,7 @@ async def run_ask(
                 type=ArtifactType.report,
                 title=title,
                 payload=result.model_dump(),
-                markdown=result.to_markdown(),
+                markdown=rendered_markdown,
             ),
             meta=Meta(
                 intent=question[:200],
