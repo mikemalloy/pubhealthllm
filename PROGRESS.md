@@ -265,6 +265,12 @@ icons). Keep the inset shell + panel styling.
 
 ## Session log (newest first)
 
+- 2026-06-08 — Bugfix: get_worst_counties_by_measure crashed with
+  TypeError on NULL LocationName. Root cause: dict.get(key, default)
+  returns None (not default) when key is present with NULL value. Fix:
+  use `or` pattern for LocationName, Data_Value_Unit, Data_Value. Added
+  regression test (monkeypatches _query_db with NULL row). 47 tests pass.
+  Deployed to Railway.
 - 2026-06-08 — Phase G3 complete. /coding page (public server component): intro
   + purpose, approaches list, software packages (4), contribute/contact (Tomás
   Aragón link), Special announcements (YouTube embed 16:9 + R-code GitHub link),
