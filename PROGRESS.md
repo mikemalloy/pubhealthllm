@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E8 (verify). E1–E7b done.
-Backend is DONE (Railway, auth, live `/ask`). Path: E8 (verify) → E9 (Vercel).
+**You are here →** Phase E, item E9 (Vercel deploy). E1–E8 done.
+Backend is DONE (Railway, auth, live `/ask`). Path: E9 (Vercel deploy).
 UI only — NO pubHealth data hookup yet.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
@@ -180,7 +180,7 @@ clear attribution to di4health / TEAM Public Health throughout.
       (name/email/avatar) + up-arrow dropdown wired to `openUserProfile()` /
       `signOut()`; `<SignedOut>` → "Sign in" (`SignInButton`). Navbar avatar stays
       a static placeholder.
-- [ ] **E8. Verify.** `pnpm build` + lint clean; manual smoke: Home public with
+- [x] **E8. Verify.** `pnpm build` + lint clean; manual smoke: Home public with
       di4health content + inset shell; `/llm` redirects logged-out, renders
       logged-in; theme + collapse work. Screenshot.
 - [ ] **E9. Deploy to Vercel.** Project root directory = `frontend`; set Clerk
@@ -212,6 +212,15 @@ clear attribution to di4health / TEAM Public Health throughout.
   (attribution + Annie Duke citations). Deleted 6 demo components
   (AppBarChart, AppAreaChart, AppLineChart, AppPieChart, CardList, TodoList).
   Home bundle: 138kB → 485B. pnpm build clean, no warnings.
+- 2026-06-08 — Phase E8 complete. Mechanical: pnpm build ✅ lint ✅ tsc ✅.
+  Cleanup: deleted 11 unused shadcn primitives (calendar, chart, checkbox,
+  form, hover-card, label, popover, progress, scroll-area, select, table);
+  removed 7 orphaned deps (@hookform/resolvers, @tanstack/react-table,
+  date-fns, react-day-picker, react-hook-form, recharts, zod). Build still
+  clean, 3 routes, 88kB middleware. Visual smoke (manual — no browser
+  automation): HOME/DEEP-tabs/figures/resources/footer, /llm auth gate,
+  sidebar nav-user, collapse, theme toggle, mobile layout — PENDING user
+  confirmation.
 - 2026-06-08 — Phase E7b complete. NavUser.tsx ("use client"): useUser() for
   conditional render (avoids SignedIn/SignedOut — removed in Clerk v7 client
   exports); isLoaded guard prevents flicker. Signed-in: Avatar (imageUrl +
