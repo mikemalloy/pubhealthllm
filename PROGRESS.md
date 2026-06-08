@@ -18,8 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase G done. E1–E9 + F1–F2b + G1–G2 done. Full stack
-deployed: Railway (backend) + Vercel (https://pubhealth.chefmike.dev).
+**You are here →** Phase G done. E1–E9 + F1–F2b + G1–G3 done.
+Full stack deployed: Railway (backend) + Vercel (https://pubhealth.chefmike.dev).
 Next: P1 (SSE streaming / latency) or additional features.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
@@ -242,6 +242,15 @@ icons). Keep the inset shell + panel styling.
       `team.html` / external di4health team and repoint them to `/team`. Confirm
       `/team` is NOT auth-gated (not added to the middleware matcher).
 
+- [x] **G3. /coding page + nav.** Public `/coding` route — a faithful port of
+      di4health.github.io/coding.html (intro/purpose, approaches list, software
+      packages, contribute/contact, Special announcements w/ the YouTube tutorial
+      embed + R-code link, Decision models: Petitti 2000 + Evans 1997 groups with
+      all notebook links, Neapolitan 2016 PENDING, Appendix open-source model
+      library + video, footnote). Verbatim citations/DOIs/URLs. Sidebar: "Coding"
+      item DIRECTLY after Home, icon `SquareFunction`. NOT auth-gated. Use the
+      same panel styling as the other pages.
+
 - [ ] **P1. `/ask` ~29s in prod.** Diagnose cold-start vs agentic loop (two
       consecutive calls). If loop → SSE streaming for perceived latency (parked
       in §3a); secondary: faster-model routing for simple Qs, result caching,
@@ -256,6 +265,14 @@ icons). Keep the inset shell + panel styling.
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase G3 complete. /coding page (public server component): intro
+  + purpose, approaches list, software packages (4), contribute/contact (Tomás
+  Aragón link), Special announcements (YouTube embed 16:9 + R-code GitHub link),
+  Decision models: Petitti 2000 (4 notebooks) + Evans 1997 (5 notebooks),
+  Neapolitan 2016 PENDING, Appendix (Notion library link + YouTube video),
+  footnote (Henderson et al. 2025 full citation). Sidebar: Coding item after
+  Home with SquareFunction icon. Nav order: Home, Coding, Resources, Team, Pub
+  Health LLM. pnpm build clean (899 B).
 - 2026-06-08 — G2 styling: Resources onto panel cards. Refactored /resources to
   match Home/Team: max-w-4xl, Card/CardContent per section, Separator between,
   base text size, text-3xl H1, text-xl H2. pnpm build clean (895 B, same as
