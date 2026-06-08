@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Copy, Check, Send, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -13,6 +14,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
+import { askQuestion } from "@/lib/api";
 
 // ── Content constants ────────────────────────────────────────────────────────
 
@@ -40,53 +42,8 @@ const EXAMPLE_PROMPTS = [
   "Which counties have the highest adult smoking rates?",
 ];
 
-const SAMPLE_REPORT_MD = `# ⚠️ Sample Report (mock data — backend not yet connected)
-
-> This is representative placeholder data to demonstrate rendering. Real figures
-> will be fetched from the backend in F2.
-
-## Diabetes in Travis County, TX
-
-**Summary:** Travis County, TX has an estimated crude diabetes prevalence of
-**9.0%** among adults (age-adjusted: 9.5%), below the national median of 11.2%.
-
-## Statistics
-
-| Measure | Value | Type | Year | Source |
-|---|---|---|---|---|
-| Diabetes prevalence | 9.0% | Crude | 2023 | CDC PLACES |
-| Diabetes prevalence | 9.5% | Age-adjusted | 2023 | CDC PLACES |
-| Obesity prevalence | 30.2% | Crude | 2023 | CDC PLACES |
-| Physical inactivity | 22.1% | Crude | 2023 | CDC PLACES |
-
-## Context
-
-Diabetes prevalence in Travis County is **below the Texas state average (12.1%)**
-and below the U.S. national average (11.6%). The county has seen moderate growth
-in prevalence since 2019 (+0.8 percentage points), consistent with national trends
-driven by an aging population and rising obesity rates.
-
-### Related MMWR findings
-
-A 2022 MMWR report (*"Trends in Diabetes Prevalence Among Adults — United States,
-2011–2020"*) noted that prevalence increased most sharply in counties with:
-- High rates of food insecurity
-- Limited access to preventive care
-- Rapid population growth
-
-## Sources
-
-- **CDC PLACES** (2023 release): county-level health estimates via small-area
-  estimation. [places.cdc.gov](https://places.cdc.gov)
-- **CDC MMWR** (2022): weekly morbidity and mortality surveillance reports.
-  [cdc.gov/mmwr](https://www.cdc.gov/mmwr)
-
-## Caveats
-
-- PLACES estimates are model-based; margins of error apply.
-- Age-adjusted rates use the 2000 U.S. standard population.
-- Comparisons across years should account for methodology changes in 2020.
-`;
+// Sentinel value for the "thinking" bubble
+const THINKING_SENTINEL = "__thinking__";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,6 +59,8 @@ interface Message {
 
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === "user";
+  const isThinking = msg.text === THINKING_SENTINEL;
+
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
@@ -109,10 +68,11 @@ function MessageBubble({ msg }: { msg: Message }) {
           "max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed",
           isUser
             ? "bg-primary text-primary-foreground rounded-br-sm"
-            : "bg-muted text-foreground rounded-bl-sm"
+            : "bg-muted text-foreground rounded-bl-sm",
+          isThinking && "italic text-muted-foreground"
         )}
       >
-        {msg.text}
+        {isThinking ? "Thinking…" : msg.text}
       </div>
     </div>
   );
@@ -164,10 +124,12 @@ function ArtifactPanel({ markdown }: { markdown: string }) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function LlmChat() {
+  const { getToken } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [artifact, setArtifact] = useState(WELCOME_MD);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<PanelImperativeHandle | null>(null);
   const nextId = useRef(0);
@@ -175,21 +137,63 @@ export default function LlmChat() {
   const scrollToBottom = () =>
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || isLoading) return;
+
+    const token = await getToken();
+    if (token === null) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId.current++,
+          role: "assistant",
+          text: "Authentication error — please sign in again.",
+        },
+      ]);
+      return;
+    }
 
     const userMsg: Message = { id: nextId.current++, role: "user", text };
-    const botMsg: Message = {
+    const thinkingMsg: Message = {
       id: nextId.current++,
       role: "assistant",
-      text: "Backend not connected yet — coming in F2.",
+      text: THINKING_SENTINEL,
     };
 
-    setMessages((prev) => [...prev, userMsg, botMsg]);
-    setArtifact(SAMPLE_REPORT_MD);
+    setMessages((prev) => [...prev, userMsg, thinkingMsg]);
     setInput("");
+    setIsLoading(true);
     setTimeout(scrollToBottom, 50);
+
+    try {
+      const resp = await askQuestion(text, token);
+      const assistantText = resp.chat_message;
+
+      setMessages((prev) => [
+        // Remove the thinking bubble (last message)
+        ...prev.slice(0, -1),
+        { id: nextId.current++, role: "assistant", text: assistantText },
+      ]);
+
+      if (resp.mode === "artifact" && resp.artifact?.markdown) {
+        setArtifact(resp.artifact.markdown);
+      }
+      // if mode === "chat", leave artifact panel as-is
+    } catch {
+      setMessages((prev) => [
+        // Remove the thinking bubble (last message)
+        ...prev.slice(0, -1),
+        {
+          id: nextId.current++,
+          role: "assistant",
+          text: "Something went wrong — please try again.",
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+      setTimeout(scrollToBottom, 50);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -279,11 +283,12 @@ export default function LlmChat() {
               placeholder="Ask about public health data…"
               rows={2}
               className="resize-none text-sm flex-1"
+              disabled={isLoading}
             />
             <Button
               size="icon"
               onClick={handleSubmit}
-              disabled={!input.trim()}
+              disabled={isLoading || !input.trim()}
               className="shrink-0"
             >
               <Send className="h-4 w-4" />
