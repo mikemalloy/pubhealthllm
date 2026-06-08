@@ -18,9 +18,9 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E7 (/llm + Clerk). E1–E6 done. Backend is DONE
-(Railway, auth, live `/ask`). Path: E7 (/llm + Clerk) → E8 (verify) → E9 (Vercel).
-UI only — NO pubHealth data hookup yet.
+**You are here →** Phase E, item E7b (sidebar nav-user). E1–E7a done.
+Backend is DONE (Railway, auth, live `/ask`). Path: E7b (sidebar nav-user) →
+E8 (verify) → E9 (Vercel). UI only — NO pubHealth data hookup yet.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -168,14 +168,18 @@ clear attribution to di4health / TEAM Public Health throughout.
       (competence-vs-complexity; di4health framework diagram — has light/dark
       variants) into `public/`; render in framed containers with theme-aware
       swapping. Native rule-of-4 grids already done in E5b.
-- [ ] **E7. `/llm` placeholder + Clerk (real, backend's instance).** `/llm` =
-      placeholder panel, auth-gated. Add `@clerk/nextjs`; `<ClerkProvider>`;
-      `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` from the SAME Clerk
-      instance as the backend's `CLERK_JWKS_URL`; `.env.example` documents them
-      (no real values committed). `middleware.ts` protects `/llm`, Home stays
-      public. Sidebar user = sidebar-07 `nav-user` wired to Clerk (`useUser`,
-      `openUserProfile`, `signOut`); signed-out → Sign in. Navbar avatar stays
-      static.
+- [x] **E7a. Clerk core + gated `/llm`.** Add `@clerk/nextjs`; `<ClerkProvider>`
+      wrapping the app in layout.tsx; `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` +
+      `CLERK_SECRET_KEY` from the SAME Clerk instance as the backend's
+      `CLERK_JWKS_URL` in `.env.local` (gitignored); `.env.example` documents them
+      with placeholders (no real values committed). `middleware.ts`
+      (`clerkMiddleware` + `createRouteMatcher`) protects `/llm`; Home stays
+      public. `/llm` = simple auth-gated placeholder panel in the inset content.
+- [ ] **E7b. Sidebar `nav-user` (Clerk).** Replace the footer user slot with a
+      sidebar-07-style `nav-user`: `<SignedIn>` → user block from `useUser`
+      (name/email/avatar) + up-arrow dropdown wired to `openUserProfile()` /
+      `signOut()`; `<SignedOut>` → "Sign in" (`SignInButton`). Navbar avatar stays
+      a static placeholder.
 - [ ] **E8. Verify.** `pnpm build` + lint clean; manual smoke: Home public with
       di4health content + inset shell; `/llm` redirects logged-out, renders
       logged-in; theme + collapse work. Screenshot.
@@ -208,6 +212,13 @@ clear attribution to di4health / TEAM Public Health throughout.
   (attribution + Annie Duke citations). Deleted 6 demo components
   (AppBarChart, AppAreaChart, AppLineChart, AppPieChart, CardList, TodoList).
   Home bundle: 138kB → 485B. pnpm build clean, no warnings.
+- 2026-06-08 — Phase E7a complete. @clerk/nextjs 7.4.3 installed. .env.local
+  created (gitignored under .env*). .env.example added with placeholder keys.
+  ClerkProvider added as outermost provider in layout.tsx. src/middleware.ts:
+  clerkMiddleware + createRouteMatcher(['/llm(.*)']) + auth.protect(). /llm
+  page: server component with auth() + placeholder panel. pnpm build clean,
+  3 routes + 88kB middleware. Clerk dev-browser handshake confirmed in curl
+  headers (x-clerk-auth-reason: protect-rewrite) — real redirect tested in browser.
 - 2026-06-08 — Phase E6 complete. Downloaded di_decision_competence_complexity.png
   (1.1MB) and di4health_dq_light.png (3.1MB) to frontend/public/img/. Dark variant
   404'd — deleted, light-frame approach used for both (bg-white panel stays white in
