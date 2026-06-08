@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ExternalLink } from "lucide-react";
+import FrameworkTabs from "@/components/FrameworkTabs";
 
 // ─── Resource cards ──────────────────────────────────────────────────────────
 
@@ -112,10 +113,7 @@ export default function HomePage() {
           real-world constraints, built on four pillars.
         </p>
 
-        {/* Placeholder for 4-pillar cards + tabs (E5b) */}
-        <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/30 flex items-center justify-center h-40 text-sm text-muted-foreground">
-          [Framework cards + tabs — built in E5b]
-        </div>
+        <FrameworkTabs />
       </section>
 
       <Separator />

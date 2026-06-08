@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E5b (di4health Home — framework centerpiece). E1+E2 done. Backend is DONE
+**You are here →** Phase E, item E6 (figures — hybrid assets). E1+E2 done. Backend is DONE
 (Railway, auth, live `/ask`). Path: E3 (rebrand) → E4 (inset shell) → E5a/E5b
 (di4health Home) → E6 (figures) → E7 (/llm + Clerk) → E8 (verify) → E9 (Vercel).
 UI only — NO pubHealth data hookup yet.
@@ -161,7 +161,7 @@ clear attribution to di4health / TEAM Public Health throughout.
       (Coding examples, DARTH, TEAM Public Health substack with Julia/Python/R
       badges), footer with attribution + Annie Duke citations. Tightened copy,
       native panels. Remove leftover chart-demo components.
-- [ ] **E5b. Home — framework centerpiece.** The "rule of 4s" as native, theme-
+- [x] **E5b. Home — framework centerpiece.** The "rule of 4s" as native, theme-
       aware visuals: 4 **DEEP** challenge cards (D/E/E/P typographic accents +
       lucide icon + mapped constraint), plus a Tabs explorer across the four
       pillars (DEEP challenges, constraints, dimensions, competency domains).
@@ -209,6 +209,13 @@ clear attribution to di4health / TEAM Public Health throughout.
   (attribution + Annie Duke citations). Deleted 6 demo components
   (AppBarChart, AppAreaChart, AppLineChart, AppPieChart, CardList, TodoList).
   Home bundle: 138kB → 485B. pnpm build clean, no warnings.
+- 2026-06-08 — Phase E5b complete. FrameworkTabs.tsx: shadcn Tabs (4 tabs).
+  Tab 1 DEEP: 4 cards with large D/E/E/P letter accents, lucide icons,
+  constraint badges (Information/Values/Time/Resources), one-liners. Tabs
+  2-4 use SimpleCard with icon+title+blurb: Constraints (4), Dimensions (4,
+  with execution framework note), Competencies (4, Alliance for Decision
+  Education). Responsive 1→2→4 col grid. page.tsx E5b placeholder → 
+  <FrameworkTabs />. pnpm build clean, Home 485B → 10.6kB.
 - 2026-06-08 — Phase E4 complete. AppSidebar: variant prop added, passed
   "inset" from layout.tsx. Navbar.tsx replaced by SiteHeader.tsx: left =
   SidebarTrigger + Separator + Breadcrumb (di4health / page); right =
