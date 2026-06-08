@@ -43,7 +43,7 @@ const AppSidebar = () => {
             <SidebarMenuButton asChild>
               <Link href="/">
                 <Image src="/logo.svg" alt="logo" width={20} height={20} />
-                <span>PubHealth</span>
+                <span>di4health</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

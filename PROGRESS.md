@@ -18,10 +18,10 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E3. Backend is DONE:
-deployed to Railway, auth enforced, live `/ask` returns real data with
-`tools_used` populated. Path: E1 → E2 → E3 → E4 → E5 → E6 (Vercel). UI framework
-only this phase — NO pubHealth data hookup yet.
+**You are here →** Phase E, item E4 (inset shell). E1+E2 done. Backend is DONE
+(Railway, auth, live `/ask`). Path: E3 (rebrand) → E4 (inset shell) → E5a/E5b
+(di4health Home) → E6 (figures) → E7 (/llm + Clerk) → E8 (verify) → E9 (Vercel).
+UI only — NO pubHealth data hookup yet.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -132,24 +132,57 @@ style: `bg-primary-foreground p-4 rounded-lg`.
       Application items become: Home (`/`, home icon) and "Pub Health LLM"
       (`/llm`, `message-square` lucide icon). Keep `collapsible="icon"` + the
       footer user slot + the `SidebarTrigger` hide behavior.
-- [ ] **E3. Pages (placeholders).** Home `/` = PUBLIC, reasonable made-up
-      PubHealth intro copy in rounded panels (chart demos removed). "Pub Health
-      LLM" `/llm` = placeholder panel, will be auth-gated in E4. Navbar
-      "Dashboard" link → `/`.
-- [ ] **E4. Clerk (real, backend's instance).** Add `@clerk/nextjs`;
-      `<ClerkProvider>` in layout; `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` +
-      `CLERK_SECRET_KEY` from the SAME Clerk instance as the backend's
-      `CLERK_JWKS_URL`; `.env.example` documents them (no real values committed).
-      `middleware.ts` protects `/llm` (redirect to sign-in), Home stays public.
-      Sidebar footer user → Clerk-driven (`useUser`, `openUserProfile`,
-      `signOut`) keeping the up-arrow dropdown; signed-out → Sign in. Navbar
-      avatar stays a static placeholder. Keep theme picker as-is.
-- [ ] **E5. Verify.** `pnpm build` passes, lint clean; manual smoke: Home loads
-      logged-out; `/llm` redirects to sign-in when logged-out and renders when
-      logged-in; sidebar collapse + theme toggle work. Capture a screenshot.
-- [ ] **E6. Deploy to Vercel.** Project root directory = `frontend`; set Clerk
-      env vars; deploy; verify the live URL (Home public, `/llm` gated). Add the
-      Vercel origin to the backend CORS allow-list (hardening item).
+### di4health pivot (decided after E2)
+
+The Home page becomes a polished landing page for **Decision Intelligence 4
+Health (di4health)** — content adapted from https://di4health.github.io (a
+project of TEAM Public Health / Tomás Aragón). Decisions locked:
+**(1) Rebrand the app to di4health** (brand strings, titles — frontend only, NOT
+the backend). **(2) Sidebar:** apply `variant="inset"` to the current sidebar for
+the floating-card shell + adopt sidebar-07's `nav-user` as the Clerk user block;
+do NOT swap the whole sidebar-07 (revisit only if nav grows nested).
+**(3) Content:** tighten di4health's text into landing-page copy — keep every idea
+and the full framework, cut word count. **(4) Figures:** hybrid — recreate the
+rule-of-4 grids as native theme-aware cards; reuse the complex competence/
+complexity + framework PNGs as re-hosted, framed, theme-swapped images. Keep
+clear attribution to di4health / TEAM Public Health throughout.
+
+- [x] **E3. Rebrand shell → di4health.** Sidebar brand "PubHealth" → "di4health";
+      `<title>`/metadata; any user-facing app name. Keep nav items (Home, Pub
+      Health LLM). Mechanical pass; build stays green. (Frontend only — backend
+      untouched per CLAUDE.md rule 4.)
+- [ ] **E4. Inset shell.** Add `variant="inset"` to the sidebar + wrap content in
+      `<SidebarInset>`; replace the plain Navbar with the inset header pattern
+      (SidebarTrigger + breadcrumb left; Dashboard link + theme toggle + static
+      avatar right). Confirm the floating rounded-card look + theme + collapse.
+- [ ] **E5a. Home — shell, hero, copy.** Public Home `/`: hero (headline,
+      mission subhead, Annie Duke quote as a styled callout, primary CTA →
+      `/llm`), the "why decision quality / complexity" band, resources row
+      (Coding examples, DARTH, TEAM Public Health substack with Julia/Python/R
+      badges), footer with attribution + Annie Duke citations. Tightened copy,
+      native panels. Remove leftover chart-demo components.
+- [ ] **E5b. Home — framework centerpiece.** The "rule of 4s" as native, theme-
+      aware visuals: 4 **DEEP** challenge cards (D/E/E/P typographic accents +
+      lucide icon + mapped constraint), plus a Tabs explorer across the four
+      pillars (DEEP challenges, constraints, dimensions, competency domains).
+- [ ] **E6. Figures (hybrid assets).** Re-host the two complex PNGs
+      (competence-vs-complexity; di4health framework diagram — has light/dark
+      variants) into `public/`; render in framed containers with theme-aware
+      swapping. Native rule-of-4 grids already done in E5b.
+- [ ] **E7. `/llm` placeholder + Clerk (real, backend's instance).** `/llm` =
+      placeholder panel, auth-gated. Add `@clerk/nextjs`; `<ClerkProvider>`;
+      `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` from the SAME Clerk
+      instance as the backend's `CLERK_JWKS_URL`; `.env.example` documents them
+      (no real values committed). `middleware.ts` protects `/llm`, Home stays
+      public. Sidebar user = sidebar-07 `nav-user` wired to Clerk (`useUser`,
+      `openUserProfile`, `signOut`); signed-out → Sign in. Navbar avatar stays
+      static.
+- [ ] **E8. Verify.** `pnpm build` + lint clean; manual smoke: Home public with
+      di4health content + inset shell; `/llm` redirects logged-out, renders
+      logged-in; theme + collapse work. Screenshot.
+- [ ] **E9. Deploy to Vercel.** Project root directory = `frontend`; set Clerk
+      env vars; deploy; verify live (Home public, `/llm` gated). Add the Vercel
+      origin to the backend CORS allow-list (hardening item).
 
 ---
 
@@ -169,6 +202,10 @@ style: `bg-primary-foreground p-4 rounded-lg`.
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase E3 complete. AppSidebar brand "PubHealth" → "di4health";
+  layout.tsx metadata title → "di4health — Decision Intelligence 4 Health",
+  description updated. No other user-facing brand strings found. pnpm build
+  clean, no warnings.
 - 2026-06-07 — Phase E2 complete. AppSidebar.tsx rewritten: brand "Lama Dev"
   → "PubHealth" (logo.svg kept), Application group trimmed to Home (/) +
   Pub Health LLM (/llm, MessageSquare icon), Projects/Collapsible/Nested
