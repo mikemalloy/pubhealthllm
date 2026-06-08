@@ -18,9 +18,10 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase F, item F3 / E9. E1–E8 done; E9 (Vercel deploy)
-still open. Backend is DONE (Railway). F1 + F2a + F2b done. Next: verify
-end-to-end on Vercel (E9) and iterate toward F3 / P1 (SSE streaming).
+**You are here →** E1–E9 done. Full stack deployed: Railway (backend) +
+Vercel (frontend, https://frontend-sigma-sandy-10.vercel.app). F1–F2b done.
+Next: raise Anthropic spend cap to test end-to-end, then P1 (SSE streaming)
+or additional features.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -183,7 +184,7 @@ clear attribution to di4health / TEAM Public Health throughout.
 - [x] **E8. Verify.** `pnpm build` + lint clean; manual smoke: Home public with
       di4health content + inset shell; `/llm` redirects logged-out, renders
       logged-in; theme + collapse work. Screenshot.
-- [ ] **E9. Deploy to Vercel.** Project root directory = `frontend`; set Clerk
+- [x] **E9. Deploy to Vercel.** Project root directory = `frontend`; set Clerk
       env vars; deploy; verify live (Home public, `/llm` gated). Add the Vercel
       origin to the backend CORS allow-list (hardening item).
 
@@ -237,6 +238,15 @@ show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase E9 + bugfixes complete. Vercel deploy:
+  frontend-sigma-sandy-10.vercel.app. NEXT_PUBLIC_API_URL + Clerk keys set as
+  Vercel env vars. CORS_ORIGINS on Railway set to Vercel origin. Railway
+  redeployed. Verified: home 200, /llm 404-without-auth (correct Clerk redirect).
+  Bugfix: removed redundant `await auth()` from llm/page.tsx — Clerk v7
+  re-throws ALL errors from buildRequestLike() unconditionally, causing 500 for
+  signed-in users. Middleware already enforces auth; page component no longer
+  needs the call. End-to-end test confirmed working locally; backend returns
+  Anthropic usage limit error (graceful fallback 200) — cap resets 2026-07-01.
 - 2026-06-08 — Phase F2b complete. Frontend wiring: `src/lib/api.ts` — typed
   `AskResponse` / `ArtifactPayload` interfaces + `askQuestion(question, token, signal)`
   with token guard, server-error-body extraction, AbortSignal support.
