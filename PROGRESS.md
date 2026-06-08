@@ -256,6 +256,10 @@ icons). Keep the inset shell + panel styling.
 
 ## Session log (newest first)
 
+- 2026-06-08 — G2 styling: Resources onto panel cards. Refactored /resources to
+  match Home/Team: max-w-4xl, Card/CardContent per section, Separator between,
+  base text size, text-3xl H1, text-xl H2. pnpm build clean (895 B, same as
+  /team). Citations/links unchanged.
 - 2026-06-08 — Phase G2 complete. /resources page (public server component):
   Software packages (4), Primer 5-part series, Individual articles (7),
   Recommended books (6) — all with DOI/external links. Sidebar: Resources item
