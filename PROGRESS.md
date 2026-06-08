@@ -18,9 +18,8 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E6 (figures — hybrid assets). E1+E2 done. Backend is DONE
-(Railway, auth, live `/ask`). Path: E3 (rebrand) → E4 (inset shell) → E5a/E5b
-(di4health Home) → E6 (figures) → E7 (/llm + Clerk) → E8 (verify) → E9 (Vercel).
+**You are here →** Phase E, item E7 (/llm + Clerk). E1–E6 done. Backend is DONE
+(Railway, auth, live `/ask`). Path: E7 (/llm + Clerk) → E8 (verify) → E9 (Vercel).
 UI only — NO pubHealth data hookup yet.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
@@ -165,7 +164,7 @@ clear attribution to di4health / TEAM Public Health throughout.
       aware visuals: 4 **DEEP** challenge cards (D/E/E/P typographic accents +
       lucide icon + mapped constraint), plus a Tabs explorer across the four
       pillars (DEEP challenges, constraints, dimensions, competency domains).
-- [ ] **E6. Figures (hybrid assets).** Re-host the two complex PNGs
+- [x] **E6. Figures (hybrid assets).** Re-host the two complex PNGs
       (competence-vs-complexity; di4health framework diagram — has light/dark
       variants) into `public/`; render in framed containers with theme-aware
       swapping. Native rule-of-4 grids already done in E5b.
@@ -209,6 +208,11 @@ clear attribution to di4health / TEAM Public Health throughout.
   (attribution + Annie Duke citations). Deleted 6 demo components
   (AppBarChart, AppAreaChart, AppLineChart, AppPieChart, CardList, TodoList).
   Home bundle: 138kB → 485B. pnpm build clean, no warnings.
+- 2026-06-08 — Phase E6 complete. Downloaded di_decision_competence_complexity.png
+  (1.1MB) and di4health_dq_light.png (3.1MB) to frontend/public/img/. Dark variant
+  404'd — deleted, light-frame approach used for both (bg-white panel stays white in
+  both themes). Figure 1 in "why decision quality" band; Figure 2 above FrameworkTabs
+  in #framework section. next/image with width/height dims. pnpm build clean.
 - 2026-06-08 — Phase E5b complete. FrameworkTabs.tsx: shadcn Tabs (4 tabs).
   Tab 1 DEEP: 4 cards with large D/E/E/P letter accents, lucide icons,
   constraint badges (Information/Values/Time/Resources), one-liners. Tabs

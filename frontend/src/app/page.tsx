@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,10 +95,23 @@ export default function HomePage() {
           Python, and R.
         </p>
 
-        {/* Placeholder for competence-vs-complexity figure (E6) */}
-        <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/30 flex items-center justify-center h-56 text-sm text-muted-foreground">
-          [Figure: competence vs. complexity — re-hosted in E6]
-        </div>
+        {/* Figure 1: competence vs. complexity (light-only source — white frame reads in both themes) */}
+        <figure className="space-y-2">
+          <div className="rounded-lg border bg-white p-4 overflow-hidden">
+            <Image
+              src="/img/di_decision_competence_complexity.png"
+              alt="Two dimensions of decision competence: competence level vs. decision complexity"
+              width={1200}
+              height={800}
+              className="w-full h-auto"
+              priority={false}
+            />
+          </div>
+          <figcaption className="text-xs text-muted-foreground text-center">
+            Two dimensions of decision competence. Source: Parnell et al.,{" "}
+            <em>Handbook of Decision Analysis</em>, 2nd ed. (Wiley, 2025).
+          </figcaption>
+        </figure>
       </section>
 
       <Separator />
@@ -112,6 +126,32 @@ export default function HomePage() {
           A holistic, practice-based framework for team decision making under
           real-world constraints, built on four pillars.
         </p>
+
+        {/* Figure 2: di4health framework overview */}
+        <figure className="space-y-2">
+          <div className="rounded-lg border bg-white p-4 overflow-hidden">
+            <Image
+              src="/img/di4health_dq_light.png"
+              alt="The Decision Intelligence 4 Health framework overview"
+              width={1200}
+              height={800}
+              className="w-full h-auto"
+              priority={false}
+            />
+          </div>
+          <figcaption className="text-xs text-muted-foreground text-center">
+            The Decision Intelligence 4 Health framework. Source:{" "}
+            <a
+              href="https://di4health.github.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              di4health
+            </a>
+            .
+          </figcaption>
+        </figure>
 
         <FrameworkTabs />
       </section>
