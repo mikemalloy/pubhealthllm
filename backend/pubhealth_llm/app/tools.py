@@ -684,7 +684,7 @@ def get_worst_counties_by_measure(
         )
 
     measure_label = rows[0].get("Short_Question_Text") or rows[0].get("Measure", measure)
-    unit = rows[0].get("Data_Value_Unit", "%")
+    unit = rows[0].get("Data_Value_Unit") or "%"
     state_upper = state.upper().strip()
 
     lines = [
@@ -696,8 +696,9 @@ def get_worst_counties_by_measure(
     ]
 
     for rank, row in enumerate(rows, 1):
-        county = row.get("LocationName", "Unknown")
-        value = row.get("Data_Value", "N/A")
+        county = row.get("LocationName") or "Unknown"
+        value = row.get("Data_Value")
+        value = "N/A" if value is None else value
         lo = row.get("Low_Confidence_Limit")
         hi = row.get("High_Confidence_Limit")
         pop = row.get("TotalPopulation")

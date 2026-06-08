@@ -328,3 +328,36 @@ def test_rank_counties_composite_db_missing(monkeypatch, tmp_path):
     result = tools_mod.rank_counties_composite("TX", ["diabetes", "obesity"])
     assert "not found" in result.lower()
     assert "Composite" not in result
+
+
+# ---------------------------------------------------------------------------
+# get_worst_counties_by_measure — NULL field robustness
+# ---------------------------------------------------------------------------
+
+
+def test_get_worst_counties_null_location_name(monkeypatch):
+    """get_worst_counties_by_measure must not crash when LocationName is NULL.
+
+    Regression test for TypeError: unsupported format string passed to
+    NoneType.__format__ — dict.get(key, default) returns None (not the
+    default) when the key is present but its value is NULL/None.
+    """
+    import pubhealth_llm.app.tools as tools_mod
+
+    null_row = {
+        "LocationName": None,        # NULL in DB → triggers the bug
+        "StateAbbr": "TX",
+        "Short_Question_Text": "Diabetes",
+        "Measure": "Diabetes among adults",
+        "Data_Value": 12.5,
+        "Data_Value_Unit": "%",
+        "Low_Confidence_Limit": 11.0,
+        "High_Confidence_Limit": 14.0,
+        "TotalPopulation": 50000,
+        "Year": 2022,
+    }
+    monkeypatch.setattr(tools_mod, "_query_db", lambda *_a, **_kw: [null_row])
+
+    result = tools_mod.get_worst_counties_by_measure("TX", "diabetes", top_n=1)
+    assert isinstance(result, str)
+    assert "Unknown" in result  # None → "Unknown" fallback
