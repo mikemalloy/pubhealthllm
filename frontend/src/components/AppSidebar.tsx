@@ -1,4 +1,4 @@
-import { Home, MessageSquare, PersonStanding } from "lucide-react";
+import { Hammer, Home, MessageSquare, PersonStanding } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +21,11 @@ const items = [
     title: "Home",
     url: "/",
     icon: Home,
+  },
+  {
+    title: "Resources",
+    url: "/resources",
+    icon: Hammer,
   },
   {
     title: "Team",
