@@ -111,6 +111,7 @@ async def run_ask(
                 type=ArtifactType.report,
                 title=title,
                 payload=result.model_dump(),
+                markdown=result.to_markdown(),
             ),
             meta=Meta(
                 intent=question[:200],

@@ -242,6 +242,7 @@ class Artifact(BaseModel):
     type: ArtifactType = Field(description="Artifact sub-type driving the frontend renderer")
     title: str = Field(description="Short title shown in the artifact panel header")
     payload: dict = Field(description="Serialized artifact data")
+    markdown: Optional[str] = Field(None, description="Pre-rendered GitHub-flavored markdown for type=report artifacts")
 
 
 # Backward-compat alias — existing code that imports ArtifactEnvelope still works

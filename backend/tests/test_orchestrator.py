@@ -277,3 +277,38 @@ async def test_run_ask_thin_phr_tools_used_empty():
         response = await run_ask("What can you do?")
 
     assert response.meta.tools_used == []
+
+
+# ---------------------------------------------------------------------------
+# Test 14 — artifact.markdown equals PublicHealthResponse.to_markdown() result
+# ---------------------------------------------------------------------------
+
+
+async def test_run_ask_artifact_markdown_equals_phr_to_markdown():
+    """Artifact mode: artifact.markdown must equal result.to_markdown()."""
+    with patch(
+        "pubhealth_llm.app.orchestrator.run_agent",
+        new=AsyncMock(return_value=AgentResult(response=_RICH_PHR, tools_used=[])),
+    ):
+        response = await run_ask("What is the diabetes rate in Travis County, TX?")
+
+    assert response.mode == "artifact"
+    assert response.artifact is not None
+    assert response.artifact.markdown == _RICH_PHR.to_markdown()
+
+
+# ---------------------------------------------------------------------------
+# Test 15 — chat mode: artifact is None (markdown never appears in chat path)
+# ---------------------------------------------------------------------------
+
+
+async def test_run_ask_chat_mode_artifact_is_none():
+    """Chat mode: artifact must be None — markdown must not appear there."""
+    with patch(
+        "pubhealth_llm.app.orchestrator.run_agent",
+        new=AsyncMock(return_value=AgentResult(response=_THIN_PHR, tools_used=[])),
+    ):
+        response = await run_ask("What can you do?")
+
+    assert response.mode == "chat"
+    assert response.artifact is None
