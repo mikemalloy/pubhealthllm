@@ -18,10 +18,9 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** E1–E9 done. Full stack deployed: Railway (backend) +
-Vercel (frontend, https://frontend-sigma-sandy-10.vercel.app). F1–F2b done.
-Next: raise Anthropic spend cap to test end-to-end, then P1 (SSE streaming)
-or additional features.
+**You are here →** Phase G done. E1–E9 + F1–F2b + G1 done. Full stack
+deployed: Railway (backend) + Vercel (https://pubhealth.chefmike.dev).
+Next: P1 (SSE streaming / latency) or additional features.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -222,7 +221,21 @@ show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
 
 ---
 
-## Perf / hardening (not blocking)
+## Phase G — Team page
+
+Content adapted faithfully from di4health.github.io/team.html (real names/
+affiliations — verbatim). Decisions: PUBLIC route (like Home); sidebar nav icon
+only = lucide `PersonStanding`; members as plain styled cards (no per-person
+icons). Keep the inset shell + panel styling.
+
+- [x] **G1. /team page + nav.** Public `/team` route rendering: intro, Lead
+      (Tomás Aragón → TEAM Public Health / UC Berkeley), Collaborators/
+      Contributors (7, alphabetical, CDPH affiliations), Acknowledgments (Annie
+      Duke, Doug Owens, Joshua Salomon — with profile links), footnotes (CDPH;
+      Medical Decision Making citation). Add a "Team" sidebar item DIRECTLY under
+      Home (icon `PersonStanding`). Grep the frontend for any links to the old
+      `team.html` / external di4health team and repoint them to `/team`. Confirm
+      `/team` is NOT auth-gated (not added to the middleware matcher).
 
 - [ ] **P1. `/ask` ~29s in prod.** Diagnose cold-start vs agentic loop (two
       consecutive calls). If loop → SSE streaming for perceived latency (parked
@@ -238,6 +251,14 @@ show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase G1 complete. /team page (public server component): intro,
+  Lead (Tomás Aragón with Substack + UC Berkeley links), 7 Collaborators/
+  Contributors (alphabetical, CDPH affiliations), 3 Acknowledgments (Annie Duke,
+  Doug Owens, Joshua Salomon with profile links), footnotes (CDPH definition +
+  Sox citation). Sidebar: Team item added between Home and Pub Health LLM with
+  PersonStanding icon. No old team.html links found in codebase. /team NOT added
+  to middleware matcher (stays public). pnpm build clean. Deployed to Vercel +
+  custom domain pubhealth.chefmike.dev live.
 - 2026-06-08 — Phase E9 + bugfixes complete. Vercel deploy:
   frontend-sigma-sandy-10.vercel.app. NEXT_PUBLIC_API_URL + Clerk keys set as
   Vercel env vars. CORS_ORIGINS on Railway set to Vercel origin. Railway
