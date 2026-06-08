@@ -18,9 +18,9 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E7b (sidebar nav-user). E1–E7a done.
-Backend is DONE (Railway, auth, live `/ask`). Path: E7b (sidebar nav-user) →
-E8 (verify) → E9 (Vercel). UI only — NO pubHealth data hookup yet.
+**You are here →** Phase E, item E8 (verify). E1–E7b done.
+Backend is DONE (Railway, auth, live `/ask`). Path: E8 (verify) → E9 (Vercel).
+UI only — NO pubHealth data hookup yet.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -175,7 +175,7 @@ clear attribution to di4health / TEAM Public Health throughout.
       with placeholders (no real values committed). `middleware.ts`
       (`clerkMiddleware` + `createRouteMatcher`) protects `/llm`; Home stays
       public. `/llm` = simple auth-gated placeholder panel in the inset content.
-- [ ] **E7b. Sidebar `nav-user` (Clerk).** Replace the footer user slot with a
+- [x] **E7b. Sidebar `nav-user` (Clerk).** Replace the footer user slot with a
       sidebar-07-style `nav-user`: `<SignedIn>` → user block from `useUser`
       (name/email/avatar) + up-arrow dropdown wired to `openUserProfile()` /
       `signOut()`; `<SignedOut>` → "Sign in" (`SignInButton`). Navbar avatar stays
@@ -212,6 +212,14 @@ clear attribution to di4health / TEAM Public Health throughout.
   (attribution + Annie Duke citations). Deleted 6 demo components
   (AppBarChart, AppAreaChart, AppLineChart, AppPieChart, CardList, TodoList).
   Home bundle: 138kB → 485B. pnpm build clean, no warnings.
+- 2026-06-08 — Phase E7b complete. NavUser.tsx ("use client"): useUser() for
+  conditional render (avoids SignedIn/SignedOut — removed in Clerk v7 client
+  exports); isLoaded guard prevents flicker. Signed-in: Avatar (imageUrl +
+  initials fallback) + name/email + ChevronsUpDown trigger; DropdownMenu opens
+  right (bottom on mobile) with header row + "Manage account" (openUserProfile)
+  + "Sign out" (signOut). Signed-out: SignInButton mode="modal" with LogIn icon.
+  AppSidebar: old User2/ChevronUp/DropdownMenu block → <NavUser />. pnpm build
+  clean, bundle unchanged.
 - 2026-06-08 — Phase E7a complete. @clerk/nextjs 7.4.3 installed. .env.local
   created (gitignored under .env*). .env.example added with placeholder keys.
   ClerkProvider added as outermost provider in layout.tsx. src/middleware.ts:
