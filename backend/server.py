@@ -82,7 +82,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="pubHealthLLM API", version="0.1.0", lifespan=lifespan)
 
-# CORS — defaults to localhost; extend via CORS_ORIGINS env var at deploy time
+# CORS — defaults to localhost; extend via CORS_ORIGINS env var at deploy time.
+# TODO: narrow allow_headers to ["Authorization", "Content-Type"] before production deploy.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
