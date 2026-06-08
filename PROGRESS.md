@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase G done. E1–E9 + F1–F2b + G1 done. Full stack
+**You are here →** Phase G done. E1–E9 + F1–F2b + G1–G2 done. Full stack
 deployed: Railway (backend) + Vercel (https://pubhealth.chefmike.dev).
 Next: P1 (SSE streaming / latency) or additional features.
 
@@ -228,6 +228,11 @@ affiliations — verbatim). Decisions: PUBLIC route (like Home); sidebar nav ico
 only = lucide `PersonStanding`; members as plain styled cards (no per-person
 icons). Keep the inset shell + panel styling.
 
+- [x] **G2. /resources page + nav.** Public `/resources` route: 4 sections
+      (Software packages, Primer 5-part series, Individual articles 7, Recommended
+      books 6). Sidebar: Resources item added after Home with Hammer icon. Not
+      auth-gated. pnpm build clean. Deployed to Vercel / pubhealth.chefmike.dev.
+
 - [x] **G1. /team page + nav.** Public `/team` route rendering: intro, Lead
       (Tomás Aragón → TEAM Public Health / UC Berkeley), Collaborators/
       Contributors (7, alphabetical, CDPH affiliations), Acknowledgments (Annie
@@ -251,6 +256,11 @@ icons). Keep the inset shell + panel styling.
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase G2 complete. /resources page (public server component):
+  Software packages (4), Primer 5-part series, Individual articles (7),
+  Recommended books (6) — all with DOI/external links. Sidebar: Resources item
+  after Home with Hammer icon. pnpm build clean (136 B static). Deployed to
+  pubhealth.chefmike.dev.
 - 2026-06-08 — Phase G1 complete. /team page (public server component): intro,
   Lead (Tomás Aragón with Substack + UC Berkeley links), 7 Collaborators/
   Contributors (alphabetical, CDPH affiliations), 3 Acknowledgments (Annie Duke,
