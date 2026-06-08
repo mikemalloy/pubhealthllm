@@ -18,10 +18,9 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase F, item F2 (wire to backend `/ask`). E1–E8 done; E9
+**You are here →** Phase F, item F2b (frontend wiring). E1–E8 done; E9
 (Vercel deploy) still open — can finish in parallel. Backend is DONE (Railway,
-auth, live `/ask`). Path: F2 (wire to `/ask`).
-F1 is done — UI only, no data. F2 wires the real backend.
+auth, live `/ask`). Path: F2b (frontend wiring). F1 + F2a done.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -207,16 +206,18 @@ show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
       prompts (copy drafted in the F1 prompt). Use local/mock state — input
       doesn't call the backend yet; render a sample report to prove markdown
       formatting. Stays Clerk-gated (from E7a).
-- [ ] **F2. Wire to backend `/ask`.** Call the Railway `/ask` with the Clerk
-      token (`useAuth().getToken()` → `Authorization: Bearer`). Map the
-      `AskResponse` envelope: `chat_message` → left thread; `artifact` (report)
-      → right panel as markdown; chat-only → left only (right keeps last/welcome).
-      Pass `message_history` for multi-turn. Solid loading/"thinking" state for
-      the ~29s latency; error handling. Decide the markdown source (surface the
-      backend's `PublicHealthResponse.to_markdown()` in the artifact vs build it
-      client-side). Add the frontend origins (localhost + Vercel) to the backend
-      CORS allow-list + redeploy Railway (this is the deferred CORS item; the one
-      sanctioned backend touch). SSE streaming stays P1.
+- [x] **F2a. Backend prep (TDD; sanctioned backend touch).** (1) Surface
+      `PublicHealthResponse.to_markdown()` in the report artifact — add a
+      `markdown` field to `Artifact`, populated by the orchestrator. (2) Make CORS
+      origins env-configurable; add the Vercel origin (localhost:3000 already
+      allowed). Tests for both. Then redeploy Railway + verify `/health`.
+- [ ] **F2b. Frontend wiring.** Replace the F1 mock: call Railway `/ask` with the
+      Clerk token (`useAuth().getToken()` → `Authorization: Bearer`); env
+      `NEXT_PUBLIC_API_URL`. Map `AskResponse`: `chat_message` → left thread;
+      `artifact.markdown` → right panel; chat-only → left only (right keeps
+      last/welcome). Single-turn for now (no `message_history` round-trip — known
+      follow-up). Solid loading/"thinking" state for the ~29s latency; error
+      handling (network/401/500). SSE streaming stays P1.
 
 ---
 
@@ -236,6 +237,15 @@ show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase F2a complete. Backend prep (TDD): (1) `markdown: Optional[str]`
+  field added to `Artifact` schema; orchestrator populates it via defensive
+  `to_markdown()` call (try/except → None on failure). Tests 14–15 in
+  test_orchestrator.py: artifact-mode asserts markdown populated; chat-mode asserts
+  artifact is None. (2) `get_cors_origins()` helper: reads `CORS_ORIGINS` env var at
+  call time, comma-splits, strips whitespace, deduplicates (defaults first). 5 tests in
+  test_cors.py. server.py `allow_origins` wired to helper; TODO comment restored.
+  All 15 orchestrator tests + 5 CORS tests green. Railway redeployed + /health 200.
+  Both tasks passed spec + quality review. Commits pushed to GitHub (ce61da3).
 - 2026-06-08 — Phase E5a complete. page.tsx replaced: hero (badge, H1,
   subhead, Annie Duke blockquote, 2 CTAs), why-decision-quality band
   (placeholder for E6 figure), framework anchor (placeholder for E5b),
