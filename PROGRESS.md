@@ -18,9 +18,10 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E9 (Vercel deploy). E1–E8 done.
-Backend is DONE (Railway, auth, live `/ask`). Path: E9 (Vercel deploy).
-UI only — NO pubHealth data hookup yet.
+**You are here →** Phase F, item F2 (wire to backend `/ask`). E1–E8 done; E9
+(Vercel deploy) still open — can finish in parallel. Backend is DONE (Railway,
+auth, live `/ask`). Path: F2 (wire to `/ask`).
+F1 is done — UI only, no data. F2 wires the real backend.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -189,6 +190,36 @@ clear attribution to di4health / TEAM Public Health throughout.
 
 ---
 
+## Phase F — Pub Health LLM page (the `/llm` UI, then wire it up)
+
+Keep the inset shell + di4health styling. Decisions locked: multi-turn
+conversation thread (left); draggable splitter that can also collapse the chat so
+the artifact goes full-width; the right artifact panel always renders the LATEST
+report as markdown (chat-only replies stay in the left thread; welcome+examples
+show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
+
+- [x] **F1. Page UI (no backend).** Two-panel resizable layout via shadcn
+      `resizable` (react-resizable-panels): left ~1/3 chat thread with input
+      pinned at the bottom; right ~2/3 artifact panel. Artifact renders markdown
+      (`react-markdown` + `remark-gfm`, Tailwind `prose`) with a copy-to-clipboard
+      icon. Chat panel collapsible; divider draggable. On fresh load the artifact
+      shows the welcome (what it can do now + future) and 2–3 clickable example
+      prompts (copy drafted in the F1 prompt). Use local/mock state — input
+      doesn't call the backend yet; render a sample report to prove markdown
+      formatting. Stays Clerk-gated (from E7a).
+- [ ] **F2. Wire to backend `/ask`.** Call the Railway `/ask` with the Clerk
+      token (`useAuth().getToken()` → `Authorization: Bearer`). Map the
+      `AskResponse` envelope: `chat_message` → left thread; `artifact` (report)
+      → right panel as markdown; chat-only → left only (right keeps last/welcome).
+      Pass `message_history` for multi-turn. Solid loading/"thinking" state for
+      the ~29s latency; error handling. Decide the markdown source (surface the
+      backend's `PublicHealthResponse.to_markdown()` in the artifact vs build it
+      client-side). Add the frontend origins (localhost + Vercel) to the backend
+      CORS allow-list + redeploy Railway (this is the deferred CORS item; the one
+      sanctioned backend touch). SSE streaming stays P1.
+
+---
+
 ## Perf / hardening (not blocking)
 
 - [ ] **P1. `/ask` ~29s in prod.** Diagnose cold-start vs agentic loop (two
@@ -212,6 +243,17 @@ clear attribution to di4health / TEAM Public Health throughout.
   (attribution + Annie Duke citations). Deleted 6 demo components
   (AppBarChart, AppAreaChart, AppLineChart, AppPieChart, CardList, TodoList).
   Home bundle: 138kB → 485B. pnpm build clean, no warnings.
+- 2026-06-08 — Phase F1 complete. LlmChat.tsx ("use client"): ResizablePanelGroup
+  (orientation="horizontal", react-resizable-panels v4 API) — left 33% chat +
+  right 67% artifact. Chat: scrollable message bubbles (user/assistant styling),
+  3 example-prompt chips on empty state (fill input on click), Textarea + Send
+  pinned at bottom, Enter-to-send. Artifact: header with Copy icon (clipboard +
+  2s "copied" state), react-markdown + remark-gfm in prose/dark:prose-invert div.
+  Chat panel collapsible via panelRef imperative handle (collapse/expand) + toggle
+  button. Welcome markdown on fresh load; sample report (heading, GFM table,
+  sources, disclaimer) on first submit. v4 API fixes: orientation not direction,
+  panelRef not ref, onResize not onCollapse/onExpand. @tailwindcss/typography
+  registered via @plugin in globals.css. pnpm build clean, /llm 58kB.
 - 2026-06-08 — Phase E8 complete. Mechanical: pnpm build ✅ lint ✅ tsc ✅.
   Cleanup: deleted 11 unused shadcn primitives (calendar, chart, checkbox,
   form, hover-card, label, popover, progress, scroll-area, select, table);
