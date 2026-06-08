@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -133,13 +133,26 @@ export default function LlmChat() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<PanelImperativeHandle | null>(null);
   const nextId = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const scrollToBottom = () =>
+  // Fix I1: scroll to bottom whenever messages change
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Fix I3: abort any in-flight request on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const handleSubmit = async () => {
     const text = input.trim();
+    // Fix C2: guard first, then set loading state immediately before any await
     if (!text || isLoading) return;
+    setIsLoading(true);
+    setInput("");
 
     const token = await getToken();
     if (token === null) {
@@ -151,55 +164,58 @@ export default function LlmChat() {
           text: "Authentication error — please sign in again.",
         },
       ]);
+      setIsLoading(false);
       return;
     }
 
+    // Fix C1: store thinkingId so we can remove by ID (not slice)
+    const thinkingId = nextId.current++;
     const userMsg: Message = { id: nextId.current++, role: "user", text };
-    const thinkingMsg: Message = {
-      id: nextId.current++,
-      role: "assistant",
-      text: THINKING_SENTINEL,
-    };
-
+    const thinkingMsg: Message = { id: thinkingId, role: "assistant", text: THINKING_SENTINEL };
     setMessages((prev) => [...prev, userMsg, thinkingMsg]);
-    setInput("");
-    setIsLoading(true);
-    setTimeout(scrollToBottom, 50);
+
+    // Fix I3: abort any previous in-flight request, set up new controller
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const resp = await askQuestion(text, token);
-      const assistantText = resp.chat_message;
+      const resp = await askQuestion(text, token, controller.signal);
+      // Fix I4: null-coalesce chat_message
+      const assistantText = resp.chat_message ?? "No response received.";
 
-      setMessages((prev) => [
-        // Remove the thinking bubble (last message)
-        ...prev.slice(0, -1),
-        { id: nextId.current++, role: "assistant", text: assistantText },
-      ]);
+      // Fix C1: remove thinking bubble by ID
+      setMessages((prev) =>
+        prev
+          .filter((m) => m.id !== thinkingId)
+          .concat({ id: nextId.current++, role: "assistant", text: assistantText })
+      );
 
       if (resp.mode === "artifact" && resp.artifact?.markdown) {
         setArtifact(resp.artifact.markdown);
       }
       // if mode === "chat", leave artifact panel as-is
-    } catch {
-      setMessages((prev) => [
-        // Remove the thinking bubble (last message)
-        ...prev.slice(0, -1),
-        {
-          id: nextId.current++,
-          role: "assistant",
-          text: "Something went wrong — please try again.",
-        },
-      ]);
+    } catch (err) {
+      // Fix I3: skip error bubble if request was aborted (component unmount)
+      if (err instanceof Error && err.name === "AbortError") return;
+      // Fix m1: log the caught error
+      console.error("[LlmChat] askQuestion failed:", err);
+      // Fix C1: remove thinking bubble by ID
+      setMessages((prev) =>
+        prev
+          .filter((m) => m.id !== thinkingId)
+          .concat({ id: nextId.current++, role: "assistant", text: "Something went wrong — please try again." })
+      );
     } finally {
       setIsLoading(false);
-      setTimeout(scrollToBottom, 50);
     }
   };
 
+  // Fix m2: void handleSubmit() to silence floating-promise lint warning
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit();
+      void handleSubmit();
     }
   };
 
@@ -287,7 +303,7 @@ export default function LlmChat() {
             />
             <Button
               size="icon"
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               disabled={isLoading || !input.trim()}
               className="shrink-0"
             >

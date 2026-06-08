@@ -20,7 +20,8 @@ export interface AskResponse {
  */
 export async function askQuestion(
   question: string,
-  token: string
+  token: string,
+  signal?: AbortSignal
 ): Promise<AskResponse> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   if (!apiUrl) {
@@ -34,6 +35,7 @@ export async function askQuestion(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ question }),
+    signal,
   });
   if (!res.ok) {
     let errorDetail: string;
