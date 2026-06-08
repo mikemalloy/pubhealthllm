@@ -18,7 +18,7 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase E, item E5a (di4health Home — shell, hero, copy). E1+E2 done. Backend is DONE
+**You are here →** Phase E, item E5b (di4health Home — framework centerpiece). E1+E2 done. Backend is DONE
 (Railway, auth, live `/ask`). Path: E3 (rebrand) → E4 (inset shell) → E5a/E5b
 (di4health Home) → E6 (figures) → E7 (/llm + Clerk) → E8 (verify) → E9 (Vercel).
 UI only — NO pubHealth data hookup yet.
@@ -155,7 +155,7 @@ clear attribution to di4health / TEAM Public Health throughout.
       `<SidebarInset>`; replace the plain Navbar with the inset header pattern
       (SidebarTrigger + breadcrumb left; Dashboard link + theme toggle + static
       avatar right). Confirm the floating rounded-card look + theme + collapse.
-- [ ] **E5a. Home — shell, hero, copy.** Public Home `/`: hero (headline,
+- [x] **E5a. Home — shell, hero, copy.** Public Home `/`: hero (headline,
       mission subhead, Annie Duke quote as a styled callout, primary CTA →
       `/llm`), the "why decision quality / complexity" band, resources row
       (Coding examples, DARTH, TEAM Public Health substack with Julia/Python/R
@@ -202,6 +202,13 @@ clear attribution to di4health / TEAM Public Health throughout.
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase E5a complete. page.tsx replaced: hero (badge, H1,
+  subhead, Annie Duke blockquote, 2 CTAs), why-decision-quality band
+  (placeholder for E6 figure), framework anchor (placeholder for E5b),
+  resources (3 cards: Coding examples/DARTH/TEAM PH with badges), footer
+  (attribution + Annie Duke citations). Deleted 6 demo components
+  (AppBarChart, AppAreaChart, AppLineChart, AppPieChart, CardList, TodoList).
+  Home bundle: 138kB → 485B. pnpm build clean, no warnings.
 - 2026-06-08 — Phase E4 complete. AppSidebar: variant prop added, passed
   "inset" from layout.tsx. Navbar.tsx replaced by SiteHeader.tsx: left =
   SidebarTrigger + Separator + Breadcrumb (di4health / page); right =
