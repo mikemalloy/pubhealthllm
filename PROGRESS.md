@@ -18,9 +18,9 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase F, item F2b (frontend wiring). E1–E8 done; E9
-(Vercel deploy) still open — can finish in parallel. Backend is DONE (Railway,
-auth, live `/ask`). Path: F2b (frontend wiring). F1 + F2a done.
+**You are here →** Phase F, item F3 / E9. E1–E8 done; E9 (Vercel deploy)
+still open. Backend is DONE (Railway). F1 + F2a + F2b done. Next: verify
+end-to-end on Vercel (E9) and iterate toward F3 / P1 (SSE streaming).
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -211,7 +211,7 @@ show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
       `markdown` field to `Artifact`, populated by the orchestrator. (2) Make CORS
       origins env-configurable; add the Vercel origin (localhost:3000 already
       allowed). Tests for both. Then redeploy Railway + verify `/health`.
-- [ ] **F2b. Frontend wiring.** Replace the F1 mock: call Railway `/ask` with the
+- [x] **F2b. Frontend wiring.** Replace the F1 mock: call Railway `/ask` with the
       Clerk token (`useAuth().getToken()` → `Authorization: Bearer`); env
       `NEXT_PUBLIC_API_URL`. Map `AskResponse`: `chat_message` → left thread;
       `artifact.markdown` → right panel; chat-only → left only (right keeps
@@ -237,6 +237,17 @@ show until the first report); copy-to-clipboard icon on the artifact. Two tasks:
 
 ## Session log (newest first)
 
+- 2026-06-08 — Phase F2b complete. Frontend wiring: `src/lib/api.ts` — typed
+  `AskResponse` / `ArtifactPayload` interfaces + `askQuestion(question, token, signal)`
+  with token guard, server-error-body extraction, AbortSignal support.
+  `NEXT_PUBLIC_API_URL` env var in `.env.local` + `.env.example`. `LlmChat.tsx`
+  wired to real Railway `/ask`: useAuth().getToken() Clerk token; thinking sentinel
+  (`__thinking__`) visible while call in-flight; success → chat_message appended
+  left + artifact.markdown → right panel if mode=artifact; error bubble + recovery;
+  setIsLoading before first await (race-safe); ID-based sentinel removal (not
+  slice); AbortController + cleanup useEffect (unmount-safe); useEffect scroll;
+  null-coalesced chat_message. F1 mock (SAMPLE_REPORT_MD + hardcoded bubble)
+  removed. pnpm build clean, zero TS errors.
 - 2026-06-08 — Phase F2a complete. Backend prep (TDD): (1) `markdown: Optional[str]`
   field added to `Artifact` schema; orchestrator populates it via defensive
   `to_markdown()` call (try/except → None on failure). Tests 14–15 in
