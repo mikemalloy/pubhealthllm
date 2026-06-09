@@ -265,6 +265,12 @@ icons). Keep the inset shell + panel styling.
 
 ## Session log (newest first)
 
+- 2026-06-09 — Fix: county name suffix (" County", " Parish") caused zero
+  DB matches → agent thrashed for 60+ seconds. Root cause: cdc_places_county
+  stores bare names ("Cook", not "Cook County"). Added _normalize_location()
+  helper; wired into get_health_statistics and compare_locations. 9 new tests
+  (6 unit + 3 integration covering "Cook County, IL" / "Harris County, TX").
+  602 passed. Deployed to Railway.
 - 2026-06-09 — Fix: /ask "Thinking… forever" hang. Root cause (confirmed via
   systematic debugging): fetch in api.ts had no timeout; if Railway cold-starts
   (~30s) + LLM call (~30s) the browser hangs indefinitely with no error bubble.
