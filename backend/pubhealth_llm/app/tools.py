@@ -20,7 +20,7 @@ the demo.
 
 Data source: CDC PLACES county-level dataset (swc5-untb), stored in
 the cdc_places_county table of data/healthgpt.db.
-LocationName contains readable county names (e.g. "Alameda County").
+LocationName contains bare county names without suffix (e.g. "Alameda", not "Alameda County").
 """
 
 import logging
@@ -158,6 +158,59 @@ def _query_db(sql: str, params: tuple = ()) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Location normalisation helper
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+_COUNTY_SUFFIX_RE = _re.compile(
+    r",?\s+(county|parish|borough|census area|municipality|city and borough"
+    r"|consolidated city-county|city)\s*$",
+    _re.IGNORECASE,
+)
+_STATE_ABBR_RE = _re.compile(r",\s*([A-Z]{2})\s*$")
+
+
+def _normalize_location(loc: str) -> tuple[str, Optional[str]]:
+    """Strip common county-type suffixes and trailing state abbreviation.
+
+    The CDC PLACES DB stores bare county names (e.g. ``"Cook"``, ``"Harris"``)
+    without a ``" County"`` suffix.  User queries and LLM-generated tool calls
+    often include ``" County"`` or a state qualifier such as ``", IL"``.
+    This helper normalises both so LIKE searches find rows correctly.
+
+    Args:
+        loc: Raw location string from the user or agent.
+
+    Returns:
+        ``(normalized_name, state_abbr)`` where ``state_abbr`` is a two-letter
+        abbreviation extracted from the string, or ``None`` if absent.
+
+    Examples::
+
+        _normalize_location("Cook County, IL")   # → ("Cook", "IL")
+        _normalize_location("Harris County, TX") # → ("Harris", "TX")
+        _normalize_location("Orleans Parish, LA")# → ("Orleans", "LA")
+        _normalize_location("Cook County")        # → ("Cook", None)
+        _normalize_location("Travis")             # → ("Travis", None)
+        _normalize_location("Texas")              # → ("Texas", None)
+    """
+    loc = loc.strip()
+
+    # 1. Extract trailing state abbreviation (e.g. ", IL")
+    state_match = _STATE_ABBR_RE.search(loc)
+    state_abbr: Optional[str] = None
+    if state_match:
+        state_abbr = state_match.group(1).upper()
+        loc = loc[: state_match.start()].strip()
+
+    # 2. Strip county-type suffix (e.g. " County", " Parish")
+    loc = _COUNTY_SUFFIX_RE.sub("", loc).strip()
+
+    return loc, state_abbr
+
+
+# ---------------------------------------------------------------------------
 # Tool: search_mmwr_reports
 # ---------------------------------------------------------------------------
 
@@ -284,15 +337,19 @@ def get_health_statistics(
             "Run: `python -m pubhealth_llm.data_ingestion.download_county_data`"
         )
 
-    # LocationName in cdc_places_county contains readable county names
-    # (e.g. "Alameda County"), so we search it directly.
-    # StateDesc and StateAbbr are also searched so state-level queries work.
+    # Normalise the location string: strip " County" / " Parish" suffixes and
+    # extract any trailing state abbreviation (e.g. "Cook County, IL" → "Cook",
+    # state_hint="IL").  The DB stores bare names like "Cook", not "Cook County".
+    location, state_hint = _normalize_location(location)
+    # Caller-supplied state= takes precedence; fall back to hint from the name.
+    effective_state = (state or state_hint or "").upper() or None
+
     conditions = ["(LocationName LIKE ? OR StateDesc LIKE ? OR StateAbbr LIKE ?)"]
     params: list = [f"%{location}%", f"%{location}%", f"%{location}%"]
 
-    if state:
+    if effective_state:
         conditions.append("StateAbbr = ?")
-        params.append(state.upper())
+        params.append(effective_state)
 
     if measure:
         # Short_Question_Text has the most readable measure names (e.g.
@@ -405,12 +462,23 @@ def compare_locations(locations: list[str], measure: str) -> str:
         locations = locations[:10]
         logger.warning("compare_locations truncated to 10 locations")
 
-    location_conditions = " OR ".join(
-        ["LocationName LIKE ? OR StateDesc LIKE ? OR StateAbbr LIKE ?"] * len(locations)
-    )
+    # Normalise each location: strip " County" suffix and extract state hints.
+    # When a state hint is present (e.g. "Cook County, IL" → "Cook", "IL") we
+    # build a tighter condition (LocationName LIKE ? AND StateAbbr = ?) instead
+    # of the broad three-column OR, avoiding false matches across states.
+    location_parts: list[str] = []
     location_params: list[str] = []
     for loc in locations:
-        location_params.extend([f"%{loc}%", f"%{loc}%", f"%{loc}%"])
+        norm, state_hint = _normalize_location(loc)
+        if state_hint:
+            location_parts.append("(LocationName LIKE ? AND StateAbbr = ?)")
+            location_params.extend([f"%{norm}%", state_hint])
+        else:
+            location_parts.append(
+                "(LocationName LIKE ? OR StateDesc LIKE ? OR StateAbbr LIKE ?)"
+            )
+            location_params.extend([f"%{norm}%", f"%{norm}%", f"%{norm}%"])
+    location_conditions = " OR ".join(location_parts)
 
     sql = f"""
         SELECT

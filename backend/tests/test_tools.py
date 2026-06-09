@@ -55,6 +55,65 @@ def test_get_available_measures_missing_db(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# _normalize_location
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_location_strips_county_suffix():
+    """'Cook County' → 'Cook', no state hint."""
+    from pubhealth_llm.app.tools import _normalize_location
+
+    name, state = _normalize_location("Cook County")
+    assert name == "Cook"
+    assert state is None
+
+
+def test_normalize_location_strips_county_and_state():
+    """'Cook County, IL' → ('Cook', 'IL')."""
+    from pubhealth_llm.app.tools import _normalize_location
+
+    name, state = _normalize_location("Cook County, IL")
+    assert name == "Cook"
+    assert state == "IL"
+
+
+def test_normalize_location_strips_parish():
+    """'Orleans Parish, LA' → ('Orleans', 'LA')."""
+    from pubhealth_llm.app.tools import _normalize_location
+
+    name, state = _normalize_location("Orleans Parish, LA")
+    assert name == "Orleans"
+    assert state == "LA"
+
+
+def test_normalize_location_plain_name_unchanged():
+    """Plain name with no suffix passes through unchanged."""
+    from pubhealth_llm.app.tools import _normalize_location
+
+    name, state = _normalize_location("Travis")
+    assert name == "Travis"
+    assert state is None
+
+
+def test_normalize_location_state_name_unchanged():
+    """State name (no county suffix) passes through unchanged."""
+    from pubhealth_llm.app.tools import _normalize_location
+
+    name, state = _normalize_location("Texas")
+    assert name == "Texas"
+    assert state is None
+
+
+def test_normalize_location_state_only_suffix():
+    """'Harris, TX' (no County suffix) extracts state."""
+    from pubhealth_llm.app.tools import _normalize_location
+
+    name, state = _normalize_location("Harris, TX")
+    assert name == "Harris"
+    assert state == "TX"
+
+
+# ---------------------------------------------------------------------------
 # get_health_statistics
 # ---------------------------------------------------------------------------
 
@@ -74,6 +133,32 @@ def test_get_health_statistics_known_state(db_path):
     )
     assert "Data_Value" in result or "Value:" in result, (
         f"Expected numeric data in result. Got: {result[:300]}"
+    )
+
+
+def test_get_health_statistics_county_suffix_stripped(db_path):
+    """'Cook County' should find the same rows as 'Cook' (suffix is stripped).
+
+    Regression test: LocationName stores 'Cook', not 'Cook County'.
+    Without normalization, LIKE '%Cook County%' returns zero rows.
+    """
+    from pubhealth_llm.app.tools import get_health_statistics
+
+    result = get_health_statistics("Cook County", state="IL")
+    assert isinstance(result, str)
+    assert "not found" not in result.lower(), (
+        f"Expected data for Cook County IL. Got: {result[:300]}"
+    )
+
+
+def test_get_health_statistics_county_suffix_with_state_in_name(db_path):
+    """'Harris County, TX' should find data (state hint extracted from name)."""
+    from pubhealth_llm.app.tools import get_health_statistics
+
+    result = get_health_statistics("Harris County, TX")
+    assert isinstance(result, str)
+    assert "not found" not in result.lower(), (
+        f"Expected data for Harris County TX. Got: {result[:300]}"
     )
 
 
@@ -108,6 +193,26 @@ def test_get_health_statistics_missing_db(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # compare_locations
 # ---------------------------------------------------------------------------
+
+
+def test_compare_locations_county_suffix_stripped(db_path):
+    """compare_locations must work when location names include 'County' suffix.
+
+    Regression test for the exact query that caused infinite agent thrashing:
+    'Cook County, IL' and 'Harris County, TX' both have LocationName stored
+    without the ' County' suffix in the DB.
+    """
+    from pubhealth_llm.app.tools import compare_locations
+
+    result = compare_locations(
+        ["Cook County, IL", "Harris County, TX"],
+        measure="obesity",
+    )
+    assert isinstance(result, str)
+    assert "not found" not in result.lower(), (
+        f"Expected comparison data. Got: {result[:300]}"
+    )
+    assert len(result) > 50
 
 
 def test_compare_locations_returns_table(db_path):
