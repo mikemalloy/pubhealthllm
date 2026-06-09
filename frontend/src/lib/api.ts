@@ -17,6 +17,12 @@ export interface AskResponse {
 /**
  * POST /ask to the Railway backend with a Clerk Bearer token.
  * Single-turn — no message_history sent.
+ *
+ * Hard timeout: 60 seconds. If the server accepts the connection but never
+ * responds (cold start, hung LLM call, wrong host), the fetch rejects with a
+ * DOMException(name="TimeoutError") instead of hanging forever. The caller's
+ * AbortSignal (e.g. component-unmount) is composed with the timeout signal so
+ * either can cancel the request independently.
  */
 export async function askQuestion(
   question: string,
@@ -28,6 +34,11 @@ export async function askQuestion(
     throw new Error("NEXT_PUBLIC_API_URL is not set");
   }
   if (!token) throw new Error("askQuestion called without an auth token");
+
+  const timeoutSignal = AbortSignal.timeout(60_000);
+  const composedSignal =
+    signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+
   const res = await fetch(`${apiUrl}/ask`, {
     method: "POST",
     headers: {
@@ -35,7 +46,7 @@ export async function askQuestion(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ question }),
-    signal,
+    signal: composedSignal,
   });
   if (!res.ok) {
     let errorDetail: string;

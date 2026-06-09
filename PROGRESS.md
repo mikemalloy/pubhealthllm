@@ -265,6 +265,15 @@ icons). Keep the inset shell + panel styling.
 
 ## Session log (newest first)
 
+- 2026-06-09 — Fix: /ask "Thinking… forever" hang. Root cause (confirmed via
+  systematic debugging): fetch in api.ts had no timeout; if Railway cold-starts
+  (~30s) + LLM call (~30s) the browser hangs indefinitely with no error bubble.
+  Separately re-confirmed NEXT_PUBLIC_API_URL in Vercel Production (removed +
+  re-added the correct Railway URL to guarantee it's baked fresh). Fix: added
+  AbortSignal.timeout(60_000) composed with the caller's unmount signal;
+  TimeoutError surfaces as "Request timed out — backend may be cold-starting"
+  in UI instead of silent hang. LlmChat.tsx updated to surface TimeoutError
+  message distinctly from generic errors. Deployed to Vercel.
 - 2026-06-08 — Bugfix: get_worst_counties_by_measure crashed with
   TypeError on NULL LocationName. Root cause: dict.get(key, default)
   returns None (not default) when key is present with NULL value. Fix:

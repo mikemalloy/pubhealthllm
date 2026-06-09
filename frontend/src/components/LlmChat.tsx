@@ -200,11 +200,16 @@ export default function LlmChat() {
       if (err instanceof Error && err.name === "AbortError") return;
       // Fix m1: log the caught error
       console.error("[LlmChat] askQuestion failed:", err);
+      // Surface timeout clearly; fall back to generic message for other errors
+      const errText =
+        err instanceof Error && err.name === "TimeoutError"
+          ? "Request timed out — the backend may be cold-starting. Please try again."
+          : "Something went wrong — please try again.";
       // Fix C1: remove thinking bubble by ID
       setMessages((prev) =>
         prev
           .filter((m) => m.id !== thinkingId)
-          .concat({ id: nextId.current++, role: "assistant", text: "Something went wrong — please try again." })
+          .concat({ id: nextId.current++, role: "assistant", text: errText })
       );
     } finally {
       setIsLoading(false);
