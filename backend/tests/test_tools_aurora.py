@@ -190,3 +190,33 @@ def test_compare_locations_unknown_measure(aurora_db):
     )
     assert isinstance(result, str)
     assert "not found" in result.lower() or "no comparison" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 4: get_available_measures + list_available_measures
+# ---------------------------------------------------------------------------
+
+def test_get_available_measures_returns_string(aurora_db):
+    from pubhealth_llm.app.tools import get_available_measures
+    result = get_available_measures()
+    assert isinstance(result, str) and len(result) > 0
+
+
+def test_get_available_measures_contains_diabetes(aurora_db):
+    from pubhealth_llm.app.tools import get_available_measures
+    result = get_available_measures()
+    assert "diabetes" in result.lower(), f"'diabetes' not in output: {result[:300]}"
+
+
+def test_get_available_measures_category_filter(aurora_db):
+    from pubhealth_llm.app.tools import get_available_measures
+    all_m = get_available_measures()
+    filtered = get_available_measures(category="Health Outcomes")
+    assert len(filtered) <= len(all_m) and len(filtered) > 0
+
+
+def test_list_available_measures_returns_list_of_dicts(aurora_db):
+    from pubhealth_llm.app.tools import list_available_measures
+    result = list_available_measures()
+    assert isinstance(result, list) and len(result) > 0
+    assert all(k in result[0] for k in ("measure_id", "measure", "short_text", "category"))

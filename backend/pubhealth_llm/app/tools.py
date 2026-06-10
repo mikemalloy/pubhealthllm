@@ -595,26 +595,23 @@ def get_available_measures(category: Optional[str] = None) -> str:
     Returns:
         Formatted list of available measures grouped by category.
     """
-    if not DB_PATH.exists():
-        return "Health statistics database not found. Run ingestion first."
-
     if category:
-        sql = f"""
-            SELECT DISTINCT MeasureId, Measure, Short_Question_Text,
-                            Category, Data_Value_Unit
-            FROM {TABLE_COUNTY}
-            WHERE Category LIKE ?
-              AND MeasureId IS NOT NULL
-            ORDER BY Category, Measure
+        sql = """
+            SELECT measure_id AS "MeasureId", name AS "Measure",
+                   short_text AS "Short_Question_Text",
+                   category AS "Category", unit AS "Data_Value_Unit"
+            FROM measures
+            WHERE category ILIKE :cat
+            ORDER BY category, name
         """
-        rows = _query_db(sql, (f"%{category}%",))
+        rows = _query_db(sql, {"cat": f"%{category}%"})
     else:
-        sql = f"""
-            SELECT DISTINCT MeasureId, Measure, Short_Question_Text,
-                            Category, Data_Value_Unit
-            FROM {TABLE_COUNTY}
-            WHERE MeasureId IS NOT NULL
-            ORDER BY Category, Measure
+        sql = """
+            SELECT measure_id AS "MeasureId", name AS "Measure",
+                   short_text AS "Short_Question_Text",
+                   category AS "Category", unit AS "Data_Value_Unit"
+            FROM measures
+            ORDER BY category, name
         """
         rows = _query_db(sql)
 
@@ -622,25 +619,21 @@ def get_available_measures(category: Optional[str] = None) -> str:
         return (
             "No measures found"
             + (f" for category '{category}'" if category else "")
-            + ". The database may need to be rebuilt."
+            + ". The database may not be populated."
         )
 
-    # Group by category
     from collections import defaultdict
     by_category: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         by_category[row["Category"]].append(row)
 
-    lines = [
-        f"Available CDC PLACES Health Measures ({len(rows)} total):\n"
-    ]
-    for cat, measures in sorted(by_category.items()):
+    lines = [f"Available CDC PLACES Health Measures ({len(rows)} total):\n"]
+    for cat, cat_measures in sorted(by_category.items()):
         lines.append(f"## {cat}")
-        for m in measures:
+        for m in cat_measures:
             unit = m.get("Data_Value_Unit", "")
             lines.append(
-                f"  • [{m['MeasureId']}] {m['Short_Question_Text']} "
-                f"({unit})"
+                f"  • [{m['MeasureId']}] {m['Short_Question_Text']} ({unit})"
             )
         lines.append("")
 
@@ -651,47 +644,32 @@ def list_available_measures(category: str | None = None) -> list[dict]:
     """
     Return structured measure data for UI autocomplete / API consumers.
 
-    Unlike get_available_measures(), this function returns raw dicts instead
-    of a formatted string. It is the data source for the GET /measures endpoint.
+    Unlike get_available_measures(), returns raw dicts.
+    Used by GET /measures endpoint.
 
     Args:
         category: Optional filter string (case-insensitive, partial match).
-                  Pass None to return all measures.
 
     Returns:
         List of dicts with keys: measure_id, measure, short_text, category.
-        Returns an empty list if the DB is absent or no rows match.
     """
-    if not DB_PATH.exists():
-        return []
-
     if category:
-        sql = f"""
-            SELECT DISTINCT MeasureId, Measure, Short_Question_Text, Category
-            FROM {TABLE_COUNTY}
-            WHERE Category LIKE ?
-              AND MeasureId IS NOT NULL
-            ORDER BY Category, Measure
+        sql = """
+            SELECT measure_id, name AS measure, short_text, category
+            FROM measures
+            WHERE category ILIKE :cat
+            ORDER BY category, name
         """
-        rows = _query_db(sql, (f"%{category}%",))
+        rows = _query_db(sql, {"cat": f"%{category}%"})
     else:
-        sql = f"""
-            SELECT DISTINCT MeasureId, Measure, Short_Question_Text, Category
-            FROM {TABLE_COUNTY}
-            WHERE MeasureId IS NOT NULL
-            ORDER BY Category, Measure
+        sql = """
+            SELECT measure_id, name AS measure, short_text, category
+            FROM measures
+            ORDER BY category, name
         """
         rows = _query_db(sql)
 
-    return [
-        {
-            "measure_id": row["MeasureId"],
-            "measure": row["Measure"],
-            "short_text": row["Short_Question_Text"],
-            "category": row["Category"],
-        }
-        for row in rows
-    ]
+    return rows
 
 
 # ---------------------------------------------------------------------------
