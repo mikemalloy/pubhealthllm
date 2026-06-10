@@ -84,8 +84,6 @@ def bedrock_available():
     Uses STS get-caller-identity (free, no model invocation) to verify
     IAM credentials before running any live Bedrock test.
     """
-    import botocore.exceptions
-
     try:
         import boto3
         boto3.client("sts", region_name=AWS_REGION).get_caller_identity()
