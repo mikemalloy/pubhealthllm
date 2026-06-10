@@ -2,14 +2,15 @@
 Model configuration for pubHealthLLM.
 
 Single source of truth for model selection. Reads PUBHEALTH_MODEL from the
-environment; falls back to the default Claude Sonnet model.
+environment; falls back to the default Bedrock Nova Pro model.
 """
 
 import os
 
-ALLOWED_PROVIDERS = {"anthropic", "openai"}
-DEFAULT_MODEL = "anthropic:claude-sonnet-4-6"
+ALLOWED_PROVIDERS = {"anthropic", "openai", "bedrock"}
+DEFAULT_MODEL = "bedrock:us.amazon.nova-pro-v1:0"
 
+# Providers that authenticate with API keys (bedrock uses IAM — no key needed)
 _API_KEY_MAP = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
@@ -27,12 +28,15 @@ def get_model() -> str:
 def validate_model_config(model: str | None = None) -> None:
     """Validate provider is allowed and required API key is present.
 
+    Bedrock uses IAM authentication — no API key check is performed.
+
     Args:
         model: Provider:model-id string to validate. Defaults to get_model().
 
     Raises:
         ValueError: If the provider is not in ALLOWED_PROVIDERS.
-        EnvironmentError: If the required API key env var is not set.
+        EnvironmentError: If the required API key env var is not set
+                          (for key-based providers only).
     """
     target = model if model is not None else get_model()
     parts = target.split(":", 1)
@@ -42,8 +46,13 @@ def validate_model_config(model: str | None = None) -> None:
         raise ValueError(
             f"Provider {provider!r} is not supported. "
             f"Allowed providers: {sorted(ALLOWED_PROVIDERS)}. "
-            f"Set PUBHEALTH_MODEL to 'anthropic:<model>' or 'openai:<model>'."
+            f"Set PUBHEALTH_MODEL to 'bedrock:<model-id>', "
+            f"'anthropic:<model>', or 'openai:<model>'."
         )
+
+    # Bedrock uses IAM auth — no API key required
+    if provider == "bedrock":
+        return
 
     key_name = _API_KEY_MAP[provider]
     if not os.getenv(key_name):

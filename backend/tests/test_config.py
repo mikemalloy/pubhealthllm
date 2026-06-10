@@ -62,3 +62,44 @@ def test_validate_model_config_none_uses_default(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     from pubhealth_llm.app.config import validate_model_config
     validate_model_config(None)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Bedrock provider tests
+# ---------------------------------------------------------------------------
+
+
+def test_bedrock_in_allowed_providers():
+    """'bedrock' must be in ALLOWED_PROVIDERS."""
+    from pubhealth_llm.app.config import ALLOWED_PROVIDERS
+    assert "bedrock" in ALLOWED_PROVIDERS
+
+
+def test_default_model_is_bedrock():
+    """DEFAULT_MODEL must start with 'bedrock:'."""
+    from pubhealth_llm.app.config import DEFAULT_MODEL
+    assert DEFAULT_MODEL.startswith("bedrock:")
+
+
+def test_validate_bedrock_needs_no_api_key(monkeypatch):
+    """validate_model_config must NOT raise EnvironmentError for bedrock."""
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    from pubhealth_llm.app.config import validate_model_config
+    # Should not raise — bedrock uses IAM, no key required
+    validate_model_config("bedrock:us.amazon.nova-pro-v1:0")
+
+
+def test_validate_anthropic_still_requires_key(monkeypatch):
+    """Anthropic provider still requires ANTHROPIC_API_KEY."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    from pubhealth_llm.app.config import validate_model_config
+    with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
+        validate_model_config("anthropic:claude-sonnet-4-6")
+
+
+def test_validate_unknown_provider_raises():
+    """Unknown provider raises ValueError."""
+    from pubhealth_llm.app.config import validate_model_config
+    with pytest.raises(ValueError, match="not supported"):
+        validate_model_config("groq:mixtral")
