@@ -13,6 +13,14 @@ Public API:
     # returns a plain string
 """
 
+# ============================================================================
+# DORMANT — NOT ON THE LIVE REQUEST PATH
+#
+# This module requires ANTHROPIC_API_KEY (hardcoded to AnthropicModel).
+# It is NOT used by run_agent() or any server route.
+# Before activating: port to the same BedrockConverseModel pattern as agent.py.
+# ============================================================================
+
 import logging
 import os
 from typing import Optional
