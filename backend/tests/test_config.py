@@ -15,7 +15,7 @@ from pubhealth_llm.app.config import DEFAULT_MODEL
 
 
 def test_get_model_default_when_unset(monkeypatch):
-    """get_model() returns the Claude Sonnet default when PUBHEALTH_MODEL is unset."""
+    """get_model() returns the Bedrock Nova Pro default when PUBHEALTH_MODEL is unset."""
     monkeypatch.delenv("PUBHEALTH_MODEL", raising=False)
     import pubhealth_llm.app.config as cfg
     assert cfg.get_model() == DEFAULT_MODEL
@@ -59,7 +59,6 @@ def test_validate_model_config_missing_key(monkeypatch):
 def test_validate_model_config_none_uses_default(monkeypatch):
     """validate_model_config(None) falls back to get_model() and does not raise."""
     monkeypatch.delenv("PUBHEALTH_MODEL", raising=False)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     from pubhealth_llm.app.config import validate_model_config
     validate_model_config(None)  # must not raise
 
