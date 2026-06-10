@@ -18,11 +18,12 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase G done + T3 (S3 Vectors ingestion) done.
-E1–E9 + F1–F2b + G1–G3 + T3 done.
-Full stack deployed: Railway (backend) + Vercel (https://pubhealth.chefmike.dev).
-S3 Vectors index `mmwr-reports` populated: 60 vectors (9 PDFs × ~7 chunks each).
-Next: P1 (SSE streaming / latency) or wire search_mmwr_reports to query S3 Vectors.
+**You are here →** Stage 5a done (AWS port).
+Aurora Serverless v2 deployed: pubhealth-aurora-cluster (us-west-1, 0–1 ACU, auto-pause 300s, PG 16.6).
+Schema: locations (3,196 rows), measures (40), health_facts (229,232), mortality_facts (10,868).
+Sanity checks passed: Travis County (48453) DIABETES = 9.0 CrdPrv / 9.5 AgeAdjPrv; Cook County (17031) = 11.8 / 10.7.
+Railway backend + Vercel frontend still live at https://pubhealth.chefmike.dev (Anthropic path, unchanged).
+Next: Stage 5b — rewrite _query_db + tools to use Aurora Data API instead of SQLite.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
