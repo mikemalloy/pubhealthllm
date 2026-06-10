@@ -24,20 +24,18 @@ LocationName contains bare county names without suffix (e.g. "Alameda", not "Ala
 """
 
 import logging
-import sqlite3
-from pathlib import Path
+import os
+import re as _re
 from typing import Optional
+
+import boto3
+
+from pubhealth_llm.app.db import get_db
+from pubhealth_llm.app.embeddings import embed_text
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-DB_PATH = Path(__file__).parents[2] / "data" / "healthgpt.db"
-CHROMA_DIR = Path(__file__).parents[2] / "data" / "chroma_db"
-COLLECTION_NAME = "mmwr_reports"
-
-# County-level table name (census-tract backup lives in cdc_places_tract)
-TABLE_COUNTY = "cdc_places_county"
 
 # Number of MMWR chunks to retrieve per search
 MMWR_TOP_K = 5
@@ -45,123 +43,14 @@ MMWR_TOP_K = 5
 # Maximum rows returned by a single SQL query (prevents huge responses)
 SQL_MAX_ROWS = 20
 
+# S3 Vectors constants
+# Read at import time — intentional. Callers (conftest.py dotenv, Railway container env)
+# set these vars before the module is first imported.
+VECTOR_BUCKET = os.environ.get("VECTOR_BUCKET", "")
+INDEX_NAME = os.environ.get("INDEX_NAME", "mmwr-reports")
+_S3V_REGION = os.environ.get("AWS_REGION", "us-west-1")
+
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# ChromaDB singleton (avoid re-loading embeddings on each tool call)
-# ---------------------------------------------------------------------------
-
-_chroma_collection = None
-
-
-def _get_chroma_collection():
-    """
-    Return the ChromaDB MMWR collection, initializing it if needed.
-
-    Uses a module-level singleton so the embedding model is loaded
-    only once per process.
-
-    Returns:
-        chromadb.Collection, or None if the DB doesn't exist yet.
-    """
-    global _chroma_collection
-    if _chroma_collection is not None:
-        return _chroma_collection
-
-    if not CHROMA_DIR.exists():
-        logger.warning("ChromaDB directory not found: %s", CHROMA_DIR)
-        return None
-
-    try:
-        import chromadb
-        from chromadb.utils import embedding_functions
-
-        client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-        ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
-        )
-        _chroma_collection = client.get_collection(
-            name=COLLECTION_NAME, embedding_function=ef
-        )
-        logger.info(
-            "ChromaDB collection '%s' loaded (%d documents)",
-            COLLECTION_NAME,
-            _chroma_collection.count(),
-        )
-    except Exception as exc:
-        logger.error("Failed to load ChromaDB collection: %s", exc)
-        return None
-
-    return _chroma_collection
-
-
-# ---------------------------------------------------------------------------
-# Public startup check — fail-fast vector store validation
-# ---------------------------------------------------------------------------
-
-
-def check_vector_store() -> None:
-    """Verify the MMWR ChromaDB collection is loadable and non-empty.
-
-    Called from the FastAPI lifespan handler so the server fails at boot
-    rather than on the first tool call.
-
-    Raises:
-        RuntimeError: If the collection cannot be loaded (chromadb missing,
-                      data/chroma_db absent, or collection not found), or if
-                      the collection loaded but contains zero documents.
-    """
-    collection = _get_chroma_collection()
-    if collection is None:
-        raise RuntimeError(
-            "MMWR vector store failed to load — check chromadb installation "
-            "and data/chroma_db/"
-        )
-    if collection.count() == 0:
-        raise RuntimeError(
-            "MMWR vector store is empty — run ingestion before starting the server"
-        )
-
-
-# ---------------------------------------------------------------------------
-# SQLite helper
-# ---------------------------------------------------------------------------
-
-
-def _query_db(sql: str, params: tuple = ()) -> list[dict]:
-    """
-    Execute a SQL query against the SQLite health database.
-
-    Args:
-        sql:    SQL query string with ? placeholders.
-        params: Positional parameters for the query.
-
-    Returns:
-        List of row dicts.  Empty list if DB not found or query fails.
-    """
-    if not DB_PATH.exists():
-        logger.warning("SQLite DB not found at %s", DB_PATH)
-        return []
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        cursor = conn.execute(sql, params)
-        rows = [dict(row) for row in cursor.fetchall()]
-        return rows
-    except sqlite3.Error as exc:
-        logger.error("SQL error: %s | query: %s", exc, sql)
-        return []
-    finally:
-        conn.close()
-
-
-# ---------------------------------------------------------------------------
-# Location normalisation helper
-# ---------------------------------------------------------------------------
-
-import re as _re
 
 _COUNTY_SUFFIX_RE = _re.compile(
     r",?\s+(county|parish|borough|census area|municipality|city and borough"
@@ -171,43 +60,191 @@ _COUNTY_SUFFIX_RE = _re.compile(
 _STATE_ABBR_RE = _re.compile(r",\s*([A-Z]{2})\s*$")
 
 
-def _normalize_location(loc: str) -> tuple[str, Optional[str]]:
-    """Strip common county-type suffixes and trailing state abbreviation.
+# ---------------------------------------------------------------------------
+# S3 Vectors singleton (avoid creating a new client on each tool call)
+# ---------------------------------------------------------------------------
 
-    The CDC PLACES DB stores bare county names (e.g. ``"Cook"``, ``"Harris"``)
-    without a ``" County"`` suffix.  User queries and LLM-generated tool calls
-    often include ``" County"`` or a state qualifier such as ``", IL"``.
-    This helper normalises both so LIKE searches find rows correctly.
+_s3v_client = None
+
+
+def _get_s3v_client():
+    """Return the boto3 s3vectors client, creating it on first call."""
+    global _s3v_client
+    if _s3v_client is None:
+        _s3v_client = boto3.client("s3vectors", region_name=_S3V_REGION)
+    return _s3v_client
+
+
+# ---------------------------------------------------------------------------
+# Public startup check — fail-fast vector store validation
+# ---------------------------------------------------------------------------
+
+
+def check_vector_store() -> None:
+    """Verify MMWR S3 Vectors index is accessible and non-empty.
+
+    Called from the FastAPI lifespan handler so the server fails at boot
+    rather than on the first tool call.
+
+    Raises:
+        RuntimeError: If VECTOR_BUCKET is not set, the index cannot be
+                      reached, or the index contains zero vectors.
+    """
+    if not VECTOR_BUCKET:
+        raise RuntimeError("VECTOR_BUCKET env var not set")
+    try:
+        resp = _get_s3v_client().list_vectors(
+            vectorBucketName=VECTOR_BUCKET,
+            indexName=INDEX_NAME,
+            maxResults=1,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"MMWR vector store check failed: {exc}") from exc
+    if not resp.get("vectors"):
+        raise RuntimeError("MMWR vector store is empty — run ingestion first")
+
+
+# ---------------------------------------------------------------------------
+# Aurora Data API helper
+# ---------------------------------------------------------------------------
+
+
+def _query_db(sql: str, params: dict = None) -> list[dict]:
+    """Execute SQL against Aurora Data API. Returns [] on error."""
+    try:
+        return get_db().query(sql, params or {})
+    except Exception as exc:
+        logger.error("Aurora query failed: %s | sql: %s", exc, sql)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Location and measure resolvers
+# ---------------------------------------------------------------------------
+
+
+def resolve_location(name: str, state: Optional[str] = None) -> str:
+    """Resolve a human-readable location name to its FIPS code.
+
+    Resolution order:
+    1. Exact canonical_name match  (e.g. "Travis County, TX" → "48453")
+    2. Exact name + state_abbr match
+    3. ILIKE name + optional state_abbr filter
 
     Args:
-        loc: Raw location string from the user or agent.
+        name:  Location name, optionally including county suffix and/or
+               state abbreviation (e.g. "Travis County, TX" or "Texas").
+        state: Two-letter state abbreviation to narrow an ambiguous name.
 
     Returns:
-        ``(normalized_name, state_abbr)`` where ``state_abbr`` is a two-letter
-        abbreviation extracted from the string, or ``None`` if absent.
+        FIPS string: 5-digit for counties, 2-digit for states, "00" for US.
 
-    Examples::
-
-        _normalize_location("Cook County, IL")   # → ("Cook", "IL")
-        _normalize_location("Harris County, TX") # → ("Harris", "TX")
-        _normalize_location("Orleans Parish, LA")# → ("Orleans", "LA")
-        _normalize_location("Cook County")        # → ("Cook", None)
-        _normalize_location("Travis")             # → ("Travis", None)
-        _normalize_location("Texas")              # → ("Texas", None)
+    Raises:
+        ValueError: If no location is found or the result is ambiguous.
     """
-    loc = loc.strip()
-
-    # 1. Extract trailing state abbreviation (e.g. ", IL")
-    state_match = _STATE_ABBR_RE.search(loc)
-    state_abbr: Optional[str] = None
+    state_match = _STATE_ABBR_RE.search(name)
+    effective_state = (state or "").upper() or None
+    clean_name = name.strip()
     if state_match:
-        state_abbr = state_match.group(1).upper()
-        loc = loc[: state_match.start()].strip()
+        if not effective_state:
+            effective_state = state_match.group(1).upper()
+        clean_name = name[: state_match.start()].strip()
+    clean_name = _COUNTY_SUFFIX_RE.sub("", clean_name).strip()
 
-    # 2. Strip county-type suffix (e.g. " County", " Parish")
-    loc = _COUNTY_SUFFIX_RE.sub("", loc).strip()
+    db = get_db()
 
-    return loc, state_abbr
+    # 1. Exact canonical_name
+    row = db.query_one(
+        "SELECT fips FROM locations WHERE canonical_name = :cname",
+        {"cname": name.strip()},
+    )
+    if row:
+        return row["fips"]
+
+    # 2. Exact name + state
+    if effective_state:
+        row = db.query_one(
+            "SELECT fips FROM locations WHERE name = :n AND state_abbr = :s",
+            {"n": clean_name, "s": effective_state},
+        )
+        if row:
+            return row["fips"]
+
+    # 3. ILIKE + optional state
+    if effective_state:
+        rows = db.query(
+            "SELECT fips FROM locations WHERE name ILIKE :n AND state_abbr = :s",
+            {"n": f"%{clean_name}%", "s": effective_state},
+        )
+    else:
+        rows = db.query(
+            "SELECT fips FROM locations WHERE name ILIKE :n",
+            {"n": f"%{clean_name}%"},
+        )
+
+    if len(rows) == 1:
+        return rows[0]["fips"]
+    if len(rows) > 1:
+        raise ValueError(
+            f"Ambiguous location '{name}': matches {len(rows)} entries. "
+            "Add a state abbreviation (e.g. 'Travis County, TX')."
+        )
+
+    # 4. Two-letter input may be a state abbreviation (e.g. "TX" → state row)
+    if len(clean_name) == 2 and clean_name.isalpha():
+        row = db.query_one(
+            "SELECT fips FROM locations "
+            "WHERE state_abbr = :abbr AND geo_level = 'state'",
+            {"abbr": clean_name.upper()},
+        )
+        if row:
+            return row["fips"]
+
+    raise ValueError(
+        f"Location '{name}' not found. "
+        "Try the full county name with state (e.g. 'Travis County, TX') "
+        "or a state name (e.g. 'Texas')."
+    )
+
+
+def resolve_measure(keyword: str) -> str:
+    """Resolve a plain-text measure keyword to its measure_id.
+
+    Tries exact match first, then partial ILIKE.
+
+    Args:
+        keyword: Measure name or keyword (e.g. "diabetes", "obesity").
+
+    Returns:
+        measure_id string (e.g. "DIABETES").
+
+    Raises:
+        ValueError: If no matching measure is found.
+    """
+    db = get_db()
+
+    # Exact match (case-insensitive via ILIKE)
+    row = db.query_one(
+        "SELECT measure_id FROM measures "
+        "WHERE name ILIKE :kw OR short_text ILIKE :kw",
+        {"kw": keyword},
+    )
+    if row:
+        return row["measure_id"]
+
+    # Partial ILIKE
+    rows = db.query(
+        "SELECT measure_id FROM measures "
+        "WHERE name ILIKE :kw OR short_text ILIKE :kw",
+        {"kw": f"%{keyword}%"},
+    )
+    if rows:
+        return rows[0]["measure_id"]
+
+    raise ValueError(
+        f"Measure '{keyword}' not found. "
+        "Use get_available_measures() to see valid measure names."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,42 +283,40 @@ def search_mmwr_reports(query: str, top_k: int = MMWR_TOP_K) -> str:
         Formatted string with retrieved passages and their source files.
         Returns a descriptive error message if the vector DB is unavailable.
     """
-    collection = _get_chroma_collection()
-    if collection is None:
+    if not VECTOR_BUCKET:
         return (
             "MMWR vector database is not available. "
             "Please run the data ingestion pipeline first: "
             "`python -m data_ingestion.run_ingestion`"
         )
 
-    if collection.count() == 0:
-        return "MMWR vector database is empty. Run ingestion to populate it."
-
     try:
-        results = collection.query(
-            query_texts=[query],
-            n_results=min(top_k, collection.count()),
-            include=["documents", "metadatas", "distances"],
+        embedding = embed_text(query)
+        resp = _get_s3v_client().query_vectors(
+            vectorBucketName=VECTOR_BUCKET,
+            indexName=INDEX_NAME,
+            queryVector={"float32": embedding},
+            topK=top_k,
+            returnMetadata=True,
         )
     except Exception as exc:
-        logger.error("ChromaDB query failed: %s", exc)
+        logger.error("S3 Vectors query failed: %s", exc)
         return f"Vector search failed: {exc}"
 
-    documents: list[str] = results["documents"][0]
-    metadatas: list[dict] = results["metadatas"][0]
-    distances: list[float] = results["distances"][0]
+    vectors = resp.get("vectors", [])
 
-    if not documents:
+    if not vectors:
         return f"No MMWR passages found for query: '{query}'"
 
     # Format results for the agent
     parts: list[str] = [f"MMWR Search Results for: '{query}'\n"]
-    for i, (doc, meta, dist) in enumerate(zip(documents, metadatas, distances), 1):
-        relevance = max(0.0, 1.0 - dist)  # convert distance to similarity
-        source = meta.get("source", "unknown")
+    for i, v in enumerate(vectors, 1):
+        text = v.get("metadata", {}).get("text", "")
+        source = v.get("metadata", {}).get("source", "unknown")
+        score = v.get("score", 1.0)
         parts.append(
-            f"[Result {i} | Source: {source} | Relevance: {relevance:.2f}]\n"
-            f"{doc.strip()}\n"
+            f"[Result {i} | Source: {source} | Relevance: {score:.2f}]\n"
+            f"{text.strip()}\n"
         )
 
     return "\n---\n".join(parts)
@@ -1036,44 +1071,6 @@ def rank_counties_composite(
     lines.append("z-score = (county value − state mean) / state std dev.")
     lines.append("Source: CDC PLACES 2023, https://www.cdc.gov/places")
     return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Mortality DB constant (shared by mortality tools)
-# ---------------------------------------------------------------------------
-
-TABLE_MORTALITY = "cdc_wonder_mortality"
-
-_MORTALITY_NO_DATA_MSG = (
-    "Mortality data is not available. "
-    "Run: `python -m pubhealth_llm.data_ingestion.download_mortality` to load "
-    "CDC Leading Causes of Death data. "
-    "NOTE: The available dataset is state-level (1999–2017). For county/parish-level "
-    "mortality data, see the manual download instructions in download_mortality.py."
-)
-
-
-def _mortality_table_exists() -> bool:
-    """Return True if the cdc_wonder_mortality table exists and has rows."""
-    if not DB_PATH.exists():
-        return False
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM sqlite_master "
-            "WHERE type='table' AND name=?",
-            (TABLE_MORTALITY,),
-        ).fetchone()[0]
-        if count == 0:
-            return False
-        rows = conn.execute(
-            f"SELECT COUNT(*) FROM {TABLE_MORTALITY}"
-        ).fetchone()[0]
-        return rows > 0
-    except sqlite3.Error:
-        return False
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------

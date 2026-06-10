@@ -44,75 +44,6 @@ def test_get_available_measures_category_filter(db_path):
     assert len(filtered) <= len(all_measures)
 
 
-def test_get_available_measures_missing_db(tmp_path, monkeypatch):
-    """Returns an error string (not an exception) when DB is missing."""
-    import pubhealth_llm.app.tools as tools_mod
-    monkeypatch.setattr(tools_mod, "DB_PATH", tmp_path / "nonexistent.db")
-
-    from pubhealth_llm.app.tools import get_available_measures
-    result = get_available_measures()
-    assert "not found" in result.lower() or "run" in result.lower()
-
-
-# ---------------------------------------------------------------------------
-# _normalize_location
-# ---------------------------------------------------------------------------
-
-
-def test_normalize_location_strips_county_suffix():
-    """'Cook County' → 'Cook', no state hint."""
-    from pubhealth_llm.app.tools import _normalize_location
-
-    name, state = _normalize_location("Cook County")
-    assert name == "Cook"
-    assert state is None
-
-
-def test_normalize_location_strips_county_and_state():
-    """'Cook County, IL' → ('Cook', 'IL')."""
-    from pubhealth_llm.app.tools import _normalize_location
-
-    name, state = _normalize_location("Cook County, IL")
-    assert name == "Cook"
-    assert state == "IL"
-
-
-def test_normalize_location_strips_parish():
-    """'Orleans Parish, LA' → ('Orleans', 'LA')."""
-    from pubhealth_llm.app.tools import _normalize_location
-
-    name, state = _normalize_location("Orleans Parish, LA")
-    assert name == "Orleans"
-    assert state == "LA"
-
-
-def test_normalize_location_plain_name_unchanged():
-    """Plain name with no suffix passes through unchanged."""
-    from pubhealth_llm.app.tools import _normalize_location
-
-    name, state = _normalize_location("Travis")
-    assert name == "Travis"
-    assert state is None
-
-
-def test_normalize_location_state_name_unchanged():
-    """State name (no county suffix) passes through unchanged."""
-    from pubhealth_llm.app.tools import _normalize_location
-
-    name, state = _normalize_location("Texas")
-    assert name == "Texas"
-    assert state is None
-
-
-def test_normalize_location_state_only_suffix():
-    """'Harris, TX' (no County suffix) extracts state."""
-    from pubhealth_llm.app.tools import _normalize_location
-
-    name, state = _normalize_location("Harris, TX")
-    assert name == "Harris"
-    assert state == "TX"
-
-
 # ---------------------------------------------------------------------------
 # get_health_statistics
 # ---------------------------------------------------------------------------
@@ -178,16 +109,6 @@ def test_get_health_statistics_unknown_location(db_path):
     result = get_health_statistics("ZZZNonExistentPlace999")
     assert isinstance(result, str)
     assert "not found" in result.lower() or "no health" in result.lower()
-
-
-def test_get_health_statistics_missing_db(tmp_path, monkeypatch):
-    """Returns an error string (not an exception) when DB is missing."""
-    import pubhealth_llm.app.tools as tools_mod
-    monkeypatch.setattr(tools_mod, "DB_PATH", tmp_path / "nonexistent.db")
-
-    from pubhealth_llm.app.tools import get_health_statistics
-    result = get_health_statistics("Travis")
-    assert "not found" in result.lower() or "run" in result.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -421,16 +342,6 @@ def test_rank_counties_composite_invalid_state(db_path):
 
     result = rank_counties_composite("Texas", ["diabetes", "obesity"])
     assert "two-letter" in result.lower()
-    assert "Composite" not in result
-
-
-def test_rank_counties_composite_db_missing(monkeypatch, tmp_path):
-    """Returns a 'not found' error string when the database is absent."""
-    import pubhealth_llm.app.tools as tools_mod
-
-    monkeypatch.setattr(tools_mod, "DB_PATH", tmp_path / "nonexistent.db")
-    result = tools_mod.rank_counties_composite("TX", ["diabetes", "obesity"])
-    assert "not found" in result.lower()
     assert "Composite" not in result
 
 

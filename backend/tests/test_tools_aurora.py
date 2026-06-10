@@ -68,3 +68,70 @@ def test_db_client_named_params(aurora_db):
         {"x": 99}
     )
     assert row["val"] == 99
+
+
+# ---------------------------------------------------------------------------
+# Task 2: resolve_location + resolve_measure
+# ---------------------------------------------------------------------------
+
+def test_resolve_location_travis_county_tx(aurora_db):
+    """'Travis County, TX' → FIPS 48453."""
+    from pubhealth_llm.app.tools import resolve_location
+    assert resolve_location("Travis County, TX") == "48453"
+
+
+def test_resolve_location_cook_county_il(aurora_db):
+    """'Cook County, IL' → FIPS 17031."""
+    from pubhealth_llm.app.tools import resolve_location
+    assert resolve_location("Cook County, IL") == "17031"
+
+
+def test_resolve_location_state_abbreviation(aurora_db):
+    """'TX' (abbreviation) → Texas state FIPS '48'."""
+    from pubhealth_llm.app.tools import resolve_location
+    assert resolve_location("TX") == "48"
+
+
+def test_resolve_location_state_name(aurora_db):
+    """'Texas' → state FIPS '48'."""
+    from pubhealth_llm.app.tools import resolve_location
+    assert resolve_location("Texas") == "48"
+
+
+def test_resolve_location_name_with_state_hint(aurora_db):
+    """'Travis' + state='TX' → county FIPS 48453."""
+    from pubhealth_llm.app.tools import resolve_location
+    assert resolve_location("Travis", state="TX") == "48453"
+
+
+def test_resolve_location_not_found_raises(aurora_db):
+    """Unknown location raises ValueError."""
+    from pubhealth_llm.app.tools import resolve_location
+    import pytest
+    with pytest.raises(ValueError, match="not found"):
+        resolve_location("ZZZNoSuchPlace999")
+
+
+def test_resolve_measure_diabetes(aurora_db):
+    """'diabetes' resolves to a known measure_id."""
+    from pubhealth_llm.app.tools import resolve_measure
+    mid = resolve_measure("diabetes")
+    assert mid is not None
+    assert isinstance(mid, str)
+    assert len(mid) > 0
+
+
+def test_resolve_measure_partial_keyword(aurora_db):
+    """Partial keyword 'diab' resolves to same measure_id as 'diabetes'."""
+    from pubhealth_llm.app.tools import resolve_measure
+    mid_full = resolve_measure("diabetes")
+    mid_partial = resolve_measure("diab")
+    assert mid_full == mid_partial
+
+
+def test_resolve_measure_not_found_raises(aurora_db):
+    """Unknown measure keyword raises ValueError."""
+    from pubhealth_llm.app.tools import resolve_measure
+    import pytest
+    with pytest.raises(ValueError, match="not found"):
+        resolve_measure("zzz_nonexistent_measure_xyz")
