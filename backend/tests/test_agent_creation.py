@@ -90,6 +90,35 @@ def test_agent_has_eight_tools(anthropic_api_key):
     )
 
 
+def test_agent_instantiates_bedrock(bedrock_available):
+    """_build_agent() builds the agent with Bedrock Nova Pro without error."""
+    from pubhealth_llm.app.agent import _build_agent
+
+    agent = _build_agent("bedrock:us.amazon.nova-pro-v1:0")
+    assert agent is not None
+
+
+def test_agent_has_eight_tools_bedrock(bedrock_available):
+    """Bedrock-backed agent must expose exactly the eight documented tools."""
+    from pubhealth_llm.app.agent import _build_agent
+
+    agent = _build_agent("bedrock:us.amazon.nova-pro-v1:0")
+    tool_names = set(agent._function_toolset.tools.keys())
+    expected = {
+        "tool_search_mmwr_reports",
+        "tool_get_health_statistics",
+        "tool_compare_locations",
+        "tool_get_available_measures",
+        "tool_get_worst_counties_by_measure",
+        "tool_rank_counties_composite",
+        "tool_get_mortality_data",
+        "tool_compare_mortality",
+    }
+    assert expected == tool_names, (
+        f"Tool mismatch.\n  Expected: {expected}\n  Found:    {tool_names}"
+    )
+
+
 def test_statistic_entry_validates():
     """StatisticEntry rejects missing required fields."""
     from pubhealth_llm.app.schemas import StatisticEntry

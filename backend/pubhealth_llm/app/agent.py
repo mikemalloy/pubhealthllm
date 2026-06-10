@@ -8,7 +8,7 @@ This module creates and configures the main agent that:
   4. Returns the response to the FastAPI interface
 
 Model selection is controlled by the PUBHEALTH_MODEL environment variable
-(see pubhealth_llm.app.config).  Supported providers: anthropic, openai.
+(see pubhealth_llm.app.config).  Supported providers: bedrock, anthropic, openai.
 
 Usage:
     from pubhealth_llm.app.agent import run_agent
@@ -25,7 +25,9 @@ from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.providers.bedrock import BedrockProvider
 
 from pubhealth_llm.app.config import get_model
 from pubhealth_llm.app.schemas import PublicHealthResponse
@@ -181,10 +183,19 @@ def _build_agent(model_str: str) -> Agent:
             )
         model = OpenAIChatModel(api_model_id, provider=OpenAIProvider(api_key=api_key))
 
+    elif provider == "bedrock":
+        model = BedrockConverseModel(
+            api_model_id,
+            provider=BedrockProvider(
+                region_name=os.getenv("AWS_REGION", "us-west-1")
+            ),
+        )
+
     else:
         raise ValueError(
             f"Provider {provider!r} is not supported. "
-            f"Set PUBHEALTH_MODEL to 'anthropic:<model>' or 'openai:<model>'."
+            f"Set PUBHEALTH_MODEL to 'bedrock:<model-id>', "
+            f"'anthropic:<model>', or 'openai:<model>'."
         )
 
     agent: Agent[None, PublicHealthResponse] = Agent(
