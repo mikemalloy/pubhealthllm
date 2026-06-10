@@ -11,19 +11,13 @@ Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` block
 
 ## Current decision (why we're here)
 
-The multi-agent code that got built is the **full planner + responder** version.
-`ARCHITECTURE.md §3a` was simplified to a **lean, no-planner** design. Code and
-doc diverged. We are aligning the **code to the doc**: strip the planner LLM call
-so `/ask` makes one model call, not two. The planner/responder modules are
-**parked, not deleted** (they're already tested; §3a re-introduces them in a
-later phase).
+AWS port work: Task 2 (add Bedrock branch) complete. Added `bedrock` provider
+support to `_build_agent()` via `BedrockConverseModel` + `BedrockProvider` (IAM auth,
+no API key). Two new tests added to `test_agent_creation.py` (will ERROR until the
+`bedrock_available` fixture is added in Task 4). Module docstring updated.
 
-**You are here →** Stage 5a done (AWS port).
-Aurora Serverless v2 deployed: pubhealth-aurora-cluster (us-west-1, 0–1 ACU, auto-pause 300s, PG 16.6).
-Schema: locations (3,196 rows), measures (40), health_facts (229,232), mortality_facts (10,868).
-Sanity checks passed: Travis County (48453) DIABETES = 9.0 CrdPrv / 9.5 AgeAdjPrv; Cook County (17031) = 11.8 / 10.7.
-Railway backend + Vercel frontend still live at https://pubhealth.chefmike.dev (Anthropic path, unchanged).
-Next: Stage 5b — rewrite _query_db + tools to use Aurora Data API instead of SQLite.
+**You are here →** Task 2 complete.
+Next: Task 3 — update tools + orchestrator for Aurora Data API + S3 Vectors.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -267,6 +261,15 @@ icons). Keep the inset shell + panel styling.
 ---
 
 ## Session log (newest first)
+
+- 2026-06-10 — T2 (Bedrock branch) complete. Added Bedrock Nova Pro support
+  to `_build_agent()`: BedrockConverseModel + BedrockProvider(region) imports +
+  elif branch with AWS_REGION env var fallback (us-west-1). Two new tests
+  (test_agent_instantiates_bedrock + test_agent_has_eight_tools_bedrock) added
+  to test_agent_creation.py — both ERROR as expected (fixture 'bedrock_available'
+  not found, added in Task 4). Module docstring updated: "Supported providers:
+  bedrock, anthropic, openai". Error message updated to list all three. All
+  existing tests (10/test_agent_creation.py + test_health.py) green. Commit 72e7528.
 
 - 2026-06-08 — T3 (build_vector_db rewrite) complete. TDD: 6 tests in
   test_build_vector_db.py (5 unit/mock + 1 live). Rewrote
