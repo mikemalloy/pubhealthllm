@@ -1,16 +1,21 @@
 """
-MMWR PDF Parser and ChromaDB Vector Database Builder.
+MMWR PDF Parser and S3 Vectors Database Builder.
 
 Reads MMWR PDFs from disk, extracts text (LlamaParse if API key
 available, otherwise PyPDF2), splits into overlapping chunks, embeds
-them, and stores in a persistent ChromaDB collection.
+them via SageMaker, and stores in an S3 Vectors index.
 
-The build is idempotent: documents already present in ChromaDB are
-identified by their source filename hash and skipped on subsequent
-runs.
+The build is idempotent: re-ingesting the same PDF overwrites existing
+vectors (same stable keys derived from filename hash + chunk index).
 
 Usage:
-    python -m data_ingestion.build_vector_db
+    python -m pubhealth_llm.data_ingestion.build_vector_db
+
+Environment variables required:
+    VECTOR_BUCKET       — S3 Vectors bucket name
+    INDEX_NAME          — S3 Vectors index name
+    SAGEMAKER_ENDPOINT  — SageMaker embedding endpoint name
+    AWS_REGION          — AWS region (default: us-west-1)
 """
 
 import hashlib
@@ -19,33 +24,31 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import chromadb
-from chromadb.utils import embedding_functions
+import boto3
 from tqdm import tqdm
+
+from pubhealth_llm.app.embeddings import embed_text
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 PDF_DIR = Path(__file__).parents[2] / "data" / "mmwr_pdfs"
-CHROMA_DIR = Path(__file__).parents[2] / "data" / "chroma_db"
-COLLECTION_NAME = "mmwr_reports"
+CHROMA_DIR = Path(__file__).parents[2] / "data" / "chroma_db"  # kept for legacy; not written
 
-# Text chunking parameters — tuned for MMWR report prose
 CHUNK_SIZE = 800        # characters per chunk
 CHUNK_OVERLAP = 150     # overlap between consecutive chunks
 MIN_CHUNK_LENGTH = 100  # discard very short fragments
 
-# Embedding model — Sentence Transformers runs locally, no API key needed.
-# Uses all-MiniLM-L6-v2 by default (fast, good quality for dense retrieval).
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# S3 Vectors batch size limit
+_S3V_BATCH_SIZE = 500
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# PDF text extraction
+# PDF text extraction (unchanged)
 # ---------------------------------------------------------------------------
 
 
@@ -130,12 +133,15 @@ def extract_text(pdf_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Text chunking
+# Text chunking (unchanged)
 # ---------------------------------------------------------------------------
 
 
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE,
-               overlap: int = CHUNK_OVERLAP) -> list[str]:
+def chunk_text(
+    text: str,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
+) -> list[str]:
     """
     Split a long text string into overlapping chunks.
 
@@ -148,7 +154,7 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE,
         overlap:    Characters of overlap between consecutive chunks.
 
     Returns:
-        List of text chunk strings.
+        List of text chunk strings filtered to MIN_CHUNK_LENGTH.
     """
     if not text.strip():
         return []
@@ -174,33 +180,8 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE,
 
 
 # ---------------------------------------------------------------------------
-# ChromaDB helpers
+# Stable document ID (unchanged)
 # ---------------------------------------------------------------------------
-
-
-def get_chroma_collection() -> chromadb.Collection:
-    """
-    Return (or create) the persistent ChromaDB collection for MMWR reports.
-
-    Uses a local Sentence Transformers embedding function so no
-    external embedding API is needed.
-
-    Returns:
-        ChromaDB Collection object.
-    """
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-
-    ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=EMBEDDING_MODEL
-    )
-
-    collection = client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        embedding_function=ef,
-        metadata={"hnsw:space": "cosine"},
-    )
-    return collection
 
 
 def _doc_id(pdf_path: Path, chunk_index: int) -> str:
@@ -215,25 +196,88 @@ def _doc_id(pdf_path: Path, chunk_index: int) -> str:
         chunk_index: Zero-based position of this chunk in the file.
 
     Returns:
-        Short hex string suitable as a ChromaDB document ID.
+        Short hex string suitable as a vector key.
     """
     name_hash = hashlib.md5(pdf_path.name.encode()).hexdigest()[:12]
     return f"{name_hash}_{chunk_index:04d}"
 
 
-def ingest_pdf(pdf_path: Path, collection: chromadb.Collection) -> int:
-    """
-    Extract, chunk, and upsert a single PDF into ChromaDB.
+# ---------------------------------------------------------------------------
+# S3 Vectors helpers
+# ---------------------------------------------------------------------------
 
-    Existing chunks for the same PDF are replaced (upsert semantics),
-    so the function is safe to call multiple times on the same file.
+
+def put_vectors_batch(
+    chunks: list[str],
+    keys: list[str],
+    metadatas: list[dict],
+    embeddings: list[list[float]],
+    bucket: str,
+    index: str,
+    region: str,
+) -> None:
+    """
+    Write vectors to S3 Vectors in batches of _S3V_BATCH_SIZE.
 
     Args:
-        pdf_path:   Path to the MMWR PDF.
-        collection: Target ChromaDB collection.
+        chunks:     Raw text strings (stored in metadata).
+        keys:       Stable unique keys for each vector.
+        metadatas:  Per-chunk metadata dicts (must include 'source').
+        embeddings: 384-dim float32 embeddings, one per chunk.
+        bucket:     S3 Vectors bucket name.
+        index:      S3 Vectors index name.
+        region:     AWS region.
+    """
+    client = boto3.client("s3vectors", region_name=region)
+
+    total = len(keys)
+    for start in range(0, total, _S3V_BATCH_SIZE):
+        end = min(start + _S3V_BATCH_SIZE, total)
+        # S3 Vectors: filterable metadata total size limit is 2048 bytes.
+        # Truncate stored text to 1500 chars to stay comfortably within
+        # the limit even for chunks with multi-byte UTF-8 characters.
+        _META_TEXT_LIMIT = 1500
+        vectors = [
+            {
+                "key": keys[i],
+                "data": {"float32": embeddings[i]},
+                "metadata": {
+                    **metadatas[i],
+                    "text": chunks[i][:_META_TEXT_LIMIT],
+                },
+            }
+            for i in range(start, end)
+        ]
+        client.put_vectors(
+            vectorBucketName=bucket,
+            indexName=index,
+            vectors=vectors,
+        )
+        logger.debug("  put_vectors batch %d–%d OK", start, end - 1)
+
+
+# ---------------------------------------------------------------------------
+# Per-PDF ingestion
+# ---------------------------------------------------------------------------
+
+
+def ingest_pdf(
+    pdf_path: Path,
+    bucket: str,
+    index: str,
+    region: str,
+) -> int:
+    """
+    Extract, chunk, embed, and store a single PDF into S3 Vectors.
+
+    Args:
+        pdf_path: Path to the MMWR PDF.
+        bucket:   S3 Vectors bucket name.
+        index:    S3 Vectors index name.
+        region:   AWS region.
 
     Returns:
-        Number of chunks upserted.
+        Number of chunks written.
     """
     text = extract_text(pdf_path)
     if not text:
@@ -245,18 +289,36 @@ def ingest_pdf(pdf_path: Path, collection: chromadb.Collection) -> int:
         logger.warning("No usable chunks from %s — skipping", pdf_path.name)
         return 0
 
-    ids = [_doc_id(pdf_path, i) for i in range(len(chunks))]
+    keys = [_doc_id(pdf_path, i) for i in range(len(chunks))]
     metadatas = [
         {
             "source": pdf_path.name,
             "chunk_index": i,
-            "total_chunks": len(chunks),
         }
         for i in range(len(chunks))
     ]
 
-    # ChromaDB upsert is idempotent — existing IDs are updated.
-    collection.upsert(documents=chunks, ids=ids, metadatas=metadatas)
+    # Embed every chunk.
+    # Truncate to 900 chars before embedding to stay within the model's
+    # 512-token limit.  MMWR tables tokenize at ~2 chars/token (dense
+    # numerics), so 900 chars ≈ 450 tokens — safely under the 512 cap.
+    _EMBED_CHAR_LIMIT = 900
+    embeddings: list[list[float]] = []
+    for chunk in chunks:
+        text_for_embed = chunk[:_EMBED_CHAR_LIMIT]
+        vec = embed_text(text_for_embed)
+        embeddings.append(vec)
+
+    put_vectors_batch(
+        chunks=chunks,
+        keys=keys,
+        metadatas=metadatas,
+        embeddings=embeddings,
+        bucket=bucket,
+        index=index,
+        region=region,
+    )
+
     return len(chunks)
 
 
@@ -267,14 +329,30 @@ def ingest_pdf(pdf_path: Path, collection: chromadb.Collection) -> int:
 
 def run(pdf_dir: Path = PDF_DIR) -> None:
     """
-    Build (or update) the ChromaDB vector database from MMWR PDFs.
+    Ingest all MMWR PDFs in pdf_dir into S3 Vectors.
 
-    Discovers all .pdf files in pdf_dir, extracts text, chunks and
-    embeds each, and upserts into the persistent ChromaDB collection.
+    Reads VECTOR_BUCKET, INDEX_NAME, and AWS_REGION from environment.
+    Iterates every .pdf file in pdf_dir, extracts, chunks, embeds, and
+    writes to S3 Vectors.
 
     Args:
         pdf_dir: Directory containing MMWR PDF files.
     """
+    bucket = os.environ.get("VECTOR_BUCKET", "")
+    index = os.environ.get("INDEX_NAME", "")
+    region = os.environ.get("AWS_REGION", "us-west-1")
+
+    if not bucket:
+        raise RuntimeError(
+            "VECTOR_BUCKET env var not set. "
+            "Export it before running build_vector_db."
+        )
+    if not index:
+        raise RuntimeError(
+            "INDEX_NAME env var not set. "
+            "Export it before running build_vector_db."
+        )
+
     pdf_files = sorted(pdf_dir.glob("*.pdf"))
     if not pdf_files:
         logger.warning(
@@ -283,20 +361,16 @@ def run(pdf_dir: Path = PDF_DIR) -> None:
         return
 
     logger.info("Found %d PDF files to process", len(pdf_files))
-    collection = get_chroma_collection()
 
     total_chunks = 0
-    for pdf_path in tqdm(pdf_files, desc="Building vector DB", unit="pdf"):
-        n = ingest_pdf(pdf_path, collection)
+    for pdf_path in tqdm(pdf_files, desc="Building S3 vector index", unit="pdf"):
+        n = ingest_pdf(pdf_path, bucket=bucket, index=index, region=region)
         total_chunks += n
         logger.debug("  %s → %d chunks", pdf_path.name, n)
 
-    logger.info(
-        "Vector DB build complete. Collection '%s' has %d documents.",
-        COLLECTION_NAME,
-        collection.count(),
+    print(
+        f"Ingestion complete: {total_chunks} chunks across {len(pdf_files)} PDFs"
     )
-    logger.info("Total chunks upserted this run: %d", total_chunks)
 
 
 if __name__ == "__main__":

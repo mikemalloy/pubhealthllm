@@ -18,9 +18,11 @@ so `/ask` makes one model call, not two. The planner/responder modules are
 **parked, not deleted** (they're already tested; §3a re-introduces them in a
 later phase).
 
-**You are here →** Phase G done. E1–E9 + F1–F2b + G1–G3 done.
+**You are here →** Phase G done + T3 (S3 Vectors ingestion) done.
+E1–E9 + F1–F2b + G1–G3 + T3 done.
 Full stack deployed: Railway (backend) + Vercel (https://pubhealth.chefmike.dev).
-Next: P1 (SSE streaming / latency) or additional features.
+S3 Vectors index `mmwr-reports` populated: 60 vectors (9 PDFs × ~7 chunks each).
+Next: P1 (SSE streaming / latency) or wire search_mmwr_reports to query S3 Vectors.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -264,6 +266,17 @@ icons). Keep the inset shell + panel styling.
 ---
 
 ## Session log (newest first)
+
+- 2026-06-08 — T3 (build_vector_db rewrite) complete. TDD: 6 tests in
+  test_build_vector_db.py (5 unit/mock + 1 live). Rewrote
+  build_vector_db.py: removed chromadb, added put_vectors_batch() via
+  boto3 s3vectors; ingest_pdf(pdf_path, bucket, index, region); run()
+  reads VECTOR_BUCKET/INDEX_NAME from env. Two implementation fixes
+  found during live test: (1) SageMaker endpoint max 512 tokens — truncate
+  embed input to 900 chars; (2) S3 Vectors filterable metadata 2048-byte
+  limit — truncate stored text to 1500 chars. Live result: 60 chunks
+  across 9 PDFs in index mmwr-reports. Full suite: 609 passed, 0 failures.
+  Added SAGEMAKER_ENDPOINT, AWS_REGION, VECTOR_BUCKET, INDEX_NAME to .env.
 
 - 2026-06-09 — Fix: county name suffix (" County", " Parish") caused zero
   DB matches → agent thrashed for 60+ seconds. Root cause: cdc_places_county
