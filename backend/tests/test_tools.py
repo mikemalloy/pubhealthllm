@@ -14,7 +14,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_get_available_measures_returns_string(db_path):
+def test_get_available_measures_returns_string(aurora_db):
     """get_available_measures() must return a non-empty string."""
     from pubhealth_llm.app.tools import get_available_measures
 
@@ -23,7 +23,7 @@ def test_get_available_measures_returns_string(db_path):
     assert len(result) > 0
 
 
-def test_get_available_measures_contains_measures(db_path):
+def test_get_available_measures_contains_measures(aurora_db):
     """get_available_measures() output must list at least one known measure."""
     from pubhealth_llm.app.tools import get_available_measures
 
@@ -34,7 +34,7 @@ def test_get_available_measures_contains_measures(db_path):
     )
 
 
-def test_get_available_measures_category_filter(db_path):
+def test_get_available_measures_category_filter(aurora_db):
     """Category filter must narrow results."""
     from pubhealth_llm.app.tools import get_available_measures
 
@@ -49,25 +49,25 @@ def test_get_available_measures_category_filter(db_path):
 # ---------------------------------------------------------------------------
 
 
-def test_get_health_statistics_known_state(db_path):
-    """Query for a well-populated state returns real data.
+def test_get_health_statistics_known_county(aurora_db):
+    """Query for a well-known county returns real data.
 
-    The ingested dataset stores FIPS codes in LocationName, so geography
-    is matched via StateDesc ('Texas') or StateAbbr ('TX').
+    Aurora health_facts stores county-level PLACES data keyed by FIPS.
+    Travis County, TX (FIPS 48453) has comprehensive PLACES coverage.
     """
     from pubhealth_llm.app.tools import get_health_statistics
 
-    result = get_health_statistics("Texas", state="TX")
+    result = get_health_statistics("Travis County, TX")
     assert isinstance(result, str)
     assert "not found" not in result.lower(), (
-        f"Expected data for Texas. Got: {result[:300]}"
+        f"Expected data for Travis County TX. Got: {result[:300]}"
     )
-    assert "Data_Value" in result or "Value:" in result, (
-        f"Expected numeric data in result. Got: {result[:300]}"
+    assert "Travis" in result, (
+        f"Expected 'Travis' in result. Got: {result[:300]}"
     )
 
 
-def test_get_health_statistics_county_suffix_stripped(db_path):
+def test_get_health_statistics_county_suffix_stripped(aurora_db):
     """'Cook County' should find the same rows as 'Cook' (suffix is stripped).
 
     Regression test: LocationName stores 'Cook', not 'Cook County'.
@@ -82,7 +82,7 @@ def test_get_health_statistics_county_suffix_stripped(db_path):
     )
 
 
-def test_get_health_statistics_county_suffix_with_state_in_name(db_path):
+def test_get_health_statistics_county_suffix_with_state_in_name(aurora_db):
     """'Harris County, TX' should find data (state hint extracted from name)."""
     from pubhealth_llm.app.tools import get_health_statistics
 
@@ -93,7 +93,7 @@ def test_get_health_statistics_county_suffix_with_state_in_name(db_path):
     )
 
 
-def test_get_health_statistics_with_measure_filter(db_path):
+def test_get_health_statistics_with_measure_filter(aurora_db):
     """Filtering by measure keyword returns rows for that measure."""
     from pubhealth_llm.app.tools import get_health_statistics
 
@@ -102,7 +102,7 @@ def test_get_health_statistics_with_measure_filter(db_path):
     assert len(result) > 50
 
 
-def test_get_health_statistics_unknown_location(db_path):
+def test_get_health_statistics_unknown_location(aurora_db):
     """An unrecognized location returns an informative 'not found' string."""
     from pubhealth_llm.app.tools import get_health_statistics
 
@@ -116,7 +116,7 @@ def test_get_health_statistics_unknown_location(db_path):
 # ---------------------------------------------------------------------------
 
 
-def test_compare_locations_county_suffix_stripped(db_path):
+def test_compare_locations_county_suffix_stripped(aurora_db):
     """compare_locations must work when location names include 'County' suffix.
 
     Regression test for the exact query that caused infinite agent thrashing:
@@ -136,7 +136,7 @@ def test_compare_locations_county_suffix_stripped(db_path):
     assert len(result) > 50
 
 
-def test_compare_locations_returns_table(db_path):
+def test_compare_locations_returns_table(aurora_db):
     """compare_locations returns a formatted comparison string.
 
     Uses state names since LocationName contains FIPS codes in the
@@ -152,7 +152,7 @@ def test_compare_locations_returns_table(db_path):
     assert len(result) > 50
 
 
-def test_compare_locations_empty_list(db_path):
+def test_compare_locations_empty_list(aurora_db):
     """An empty location list returns a descriptive error string."""
     from pubhealth_llm.app.tools import compare_locations
 
@@ -161,7 +161,7 @@ def test_compare_locations_empty_list(db_path):
     assert "no locations" in result.lower() or "at least" in result.lower()
 
 
-def test_compare_locations_bad_measure(db_path):
+def test_compare_locations_bad_measure(aurora_db):
     """An unrecognized measure returns a 'not found' string, not an exception."""
     from pubhealth_llm.app.tools import compare_locations
 
@@ -210,7 +210,7 @@ def test_search_mmwr_missing_chroma(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_rank_counties_composite_two_measures(db_path):
+def test_rank_counties_composite_two_measures(aurora_db):
     """Returns a ranked composite table for 2 measures in TX."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -224,7 +224,7 @@ def test_rank_counties_composite_two_measures(db_path):
     assert "Obesity" in result or "obesity" in result
 
 
-def test_rank_counties_composite_three_measures(db_path):
+def test_rank_counties_composite_three_measures(aurora_db):
     """Returns composite output for 3 measures including physical inactivity."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -240,7 +240,7 @@ def test_rank_counties_composite_three_measures(db_path):
     )
 
 
-def test_rank_counties_composite_target_location_in_top_n(db_path):
+def test_rank_counties_composite_target_location_in_top_n(aurora_db):
     """Target county appears with arrow marker when it falls in top_n."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -253,7 +253,7 @@ def test_rank_counties_composite_target_location_in_top_n(db_path):
     assert "← target" in result
 
 
-def test_rank_counties_composite_target_location_outside_top_n(db_path):
+def test_rank_counties_composite_target_location_outside_top_n(aurora_db):
     """Target county is appended below the table when outside top_n."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -267,7 +267,7 @@ def test_rank_counties_composite_target_location_outside_top_n(db_path):
     assert "← target" in result
 
 
-def test_rank_counties_composite_top_n_limits_rows(db_path):
+def test_rank_counties_composite_top_n_limits_rows(aurora_db):
     """top_n=5 produces at most 5 ranked rows (plus optional target row)."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -283,7 +283,7 @@ def test_rank_counties_composite_top_n_limits_rows(db_path):
     )
 
 
-def test_rank_counties_composite_numeric_values(db_path):
+def test_rank_counties_composite_numeric_values(aurora_db):
     """Composite score column contains real numbers (not all zeros)."""
     from pubhealth_llm.app.tools import rank_counties_composite
     import re
@@ -303,7 +303,7 @@ def test_rank_counties_composite_numeric_values(db_path):
     )
 
 
-def test_rank_counties_composite_missing_one_measure(db_path):
+def test_rank_counties_composite_missing_one_measure(aurora_db):
     """One invalid measure is noted; composite still runs on the valid two."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -317,7 +317,7 @@ def test_rank_counties_composite_missing_one_measure(db_path):
     assert "zzz_nonexistent_measure" in result or "Not found" in result
 
 
-def test_rank_counties_composite_all_measures_missing(db_path):
+def test_rank_counties_composite_all_measures_missing(aurora_db):
     """Returns a clear error when no measures are found in the database."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -327,7 +327,7 @@ def test_rank_counties_composite_all_measures_missing(db_path):
     assert "Not found" in result or "none found" in result or "0 of" in result
 
 
-def test_rank_counties_composite_requires_two_measures(db_path):
+def test_rank_counties_composite_requires_two_measures(aurora_db):
     """Returns an error when fewer than 2 measures are provided."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -336,7 +336,7 @@ def test_rank_counties_composite_requires_two_measures(db_path):
     assert "Composite" not in result
 
 
-def test_rank_counties_composite_invalid_state(db_path):
+def test_rank_counties_composite_invalid_state(aurora_db):
     """Returns a clear error for a non-two-letter state code."""
     from pubhealth_llm.app.tools import rank_counties_composite
 
@@ -371,6 +371,7 @@ def test_get_worst_counties_null_location_name(monkeypatch):
         "TotalPopulation": 50000,
         "Year": 2022,
     }
+    monkeypatch.setattr(tools_mod, "resolve_measure", lambda kw: "DIABETES")
     monkeypatch.setattr(tools_mod, "_query_db", lambda *_a, **_kw: [null_row])
 
     result = tools_mod.get_worst_counties_by_measure("TX", "diabetes", top_n=1)

@@ -2,37 +2,9 @@
 Aurora-backed tool tests.
 
 All tests guard on the `aurora_db` fixture (skips when AURORA_CLUSTER_ARN unset).
-The fixture warms the cluster with SELECT 1 before any test runs.
+The fixture is defined in conftest.py and warms the cluster with SELECT 1.
 """
-import os
 import pytest
-from pathlib import Path
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="session")
-def aurora_db():
-    """Return a DataAPIClient connected to Aurora. Skips if env not set.
-
-    Also warms the cluster — Aurora auto-pauses after 5 min; first query
-    can take 2–3 min. The SELECT 1 warm-up absorbs that latency so
-    subsequent test queries are fast.
-    """
-    if not os.environ.get("AURORA_CLUSTER_ARN"):
-        pytest.skip("AURORA_CLUSTER_ARN not set — skipping Aurora tool tests")
-    from pubhealth_llm.app.db import DataAPIClient
-    client = DataAPIClient()
-    # Warm the cluster (absorbs 2–3 min cold-start latency)
-    try:
-        result = client.query_one("SELECT 1 AS ping", {})
-    except Exception as exc:
-        pytest.skip(f"Aurora unreachable during warm-up: {exc}")
-    if result is None:
-        pytest.skip("Aurora warm-up returned None — cluster may be unavailable")
-    return client
 
 
 # ---------------------------------------------------------------------------

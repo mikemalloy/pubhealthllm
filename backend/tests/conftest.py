@@ -58,6 +58,25 @@ def s3v_index():
     return boto3.client("s3vectors", region_name=AWS_REGION)
 
 
+@pytest.fixture(scope="session")
+def aurora_db():
+    """Return a DataAPIClient connected to Aurora. Skips if AURORA_CLUSTER_ARN unset.
+
+    Warms the cluster with SELECT 1 before tests run (absorbs cold-start latency).
+    """
+    if not os.environ.get("AURORA_CLUSTER_ARN"):
+        pytest.skip("AURORA_CLUSTER_ARN not set — skipping Aurora tests")
+    from pubhealth_llm.app.db import DataAPIClient
+    client = DataAPIClient()
+    try:
+        result = client.query_one("SELECT 1 AS ping", {})
+    except Exception as exc:
+        pytest.skip(f"Aurora unreachable during warm-up: {exc}")
+    if result is None:
+        pytest.skip("Aurora warm-up returned None — cluster may be unavailable")
+    return client
+
+
 # ---------------------------------------------------------------------------
 # Mortality fixtures (new)
 # ---------------------------------------------------------------------------

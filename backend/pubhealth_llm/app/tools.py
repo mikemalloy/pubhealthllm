@@ -190,7 +190,18 @@ def resolve_location(name: str, state: Optional[str] = None) -> str:
         if row:
             return row["fips"]
 
-    # 3. ILIKE + optional state
+    # 3. Two-letter input may be a state abbreviation (e.g. "TX", "LA" → state row).
+    #    Checked before ILIKE to avoid false ambiguity from substring matches.
+    if len(clean_name) == 2 and clean_name.isalpha():
+        row = db.query_one(
+            "SELECT fips FROM locations "
+            "WHERE state_abbr = :abbr AND geo_level = 'state'",
+            {"abbr": clean_name.upper()},
+        )
+        if row:
+            return row["fips"]
+
+    # 4. ILIKE + optional state
     if effective_state:
         rows = db.query(
             "SELECT fips FROM locations WHERE name ILIKE :n AND state_abbr = :s",
@@ -209,16 +220,6 @@ def resolve_location(name: str, state: Optional[str] = None) -> str:
             f"Ambiguous location '{name}': matches {len(rows)} entries. "
             "Add a state abbreviation (e.g. 'Travis County, TX')."
         )
-
-    # 4. Two-letter input may be a state abbreviation (e.g. "TX" → state row)
-    if len(clean_name) == 2 and clean_name.isalpha():
-        row = db.query_one(
-            "SELECT fips FROM locations "
-            "WHERE state_abbr = :abbr AND geo_level = 'state'",
-            {"abbr": clean_name.upper()},
-        )
-        if row:
-            return row["fips"]
 
     raise ValueError(
         f"Location '{name}' not found. "

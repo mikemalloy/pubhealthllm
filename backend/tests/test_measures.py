@@ -103,9 +103,9 @@ def test_list_available_measures_category_filter(db_path):
     assert all("hronic" in item["category"] for item in filtered)
 
 
-def test_list_available_measures_returns_empty_list_on_missing_db(tmp_path, monkeypatch):
-    """Returns [] (not an exception) when the DB file is absent."""
+def test_list_available_measures_returns_empty_list_on_aurora_error(monkeypatch):
+    """Returns [] (not an exception) when Aurora returns no data."""
     import pubhealth_llm.app.tools as tools_module
-    monkeypatch.setattr(tools_module, "DB_PATH", tmp_path / "nonexistent.db")
+    monkeypatch.setattr(tools_module, "_query_db", lambda *_a, **_kw: [])
     result = tools_module.list_available_measures()
     assert result == []
