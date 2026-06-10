@@ -38,15 +38,13 @@ def _q(client, sql, params=None):
     return client.execute_statement(**kwargs)
 
 
-def _scalar(resp) -> int | float | str | None:
+def _scalar(resp) -> int | float | str | bool | None:
     """Extract the single scalar value from a Data API response."""
     field = resp["records"][0][0]
-    return (
-        field.get("longValue")
-        or field.get("doubleValue")
-        or field.get("stringValue")
-        or field.get("booleanValue")
-    )
+    for key in ("longValue", "doubleValue", "stringValue", "booleanValue"):
+        if key in field:
+            return field[key]
+    return None
 
 
 # ---------------------------------------------------------------------------
