@@ -85,7 +85,6 @@ def bedrock_available():
     IAM credentials before running any live Bedrock test.
     """
     try:
-        import boto3
         boto3.client("sts", region_name=AWS_REGION).get_caller_identity()
     except Exception as exc:
         pytest.skip(f"AWS credentials not configured — skipping Bedrock tests: {exc}")

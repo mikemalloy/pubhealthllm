@@ -455,9 +455,9 @@ async def run_agent(
         question:        The user's natural language question.
         message_history: Optional list of prior conversation messages
                          for multi-turn context.
-        model:           Provider:model-id string (e.g. "anthropic:claude-sonnet-4-6").
+        model:           Provider:model-id string (e.g. "bedrock:us.amazon.nova-pro-v1:0").
                          Defaults to the value of PUBHEALTH_MODEL env var, or
-                         "anthropic:claude-sonnet-4-6" if that var is unset.
+                         "bedrock:us.amazon.nova-pro-v1:0" if that var is unset.
 
     Returns:
         AgentResult with a validated PublicHealthResponse (summary, evidence,

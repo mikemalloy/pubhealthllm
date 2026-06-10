@@ -1,8 +1,12 @@
 """
 Tests for environment configuration.
 
-Verifies required API keys are loaded from .env and have plausible values.
+Verifies required keys/credentials are loaded from .env and have plausible values.
 Does NOT make network calls.
+
+Note: The default model is Bedrock Nova Pro (IAM auth). ANTHROPIC_API_KEY is only
+required when PUBHEALTH_MODEL is set to an Anthropic provider. These tests skip
+if the default model is not Anthropic.
 """
 
 import os
@@ -12,7 +16,16 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parents[1] / ".env")
 
+import pytest
+from pubhealth_llm.app.config import DEFAULT_MODEL
 
+_anthropic_required = DEFAULT_MODEL.startswith("anthropic:")
+
+
+@pytest.mark.skipif(
+    not _anthropic_required,
+    reason="ANTHROPIC_API_KEY not required when default model is not Anthropic",
+)
 def test_anthropic_api_key_is_set():
     key = os.getenv("ANTHROPIC_API_KEY", "")
     assert key, (
@@ -21,6 +34,10 @@ def test_anthropic_api_key_is_set():
     )
 
 
+@pytest.mark.skipif(
+    not _anthropic_required,
+    reason="ANTHROPIC_API_KEY not required when default model is not Anthropic",
+)
 def test_anthropic_api_key_not_placeholder():
     key = os.getenv("ANTHROPIC_API_KEY", "")
     assert key != "sk-ant-your-key-here", (
@@ -28,6 +45,10 @@ def test_anthropic_api_key_not_placeholder():
     )
 
 
+@pytest.mark.skipif(
+    not _anthropic_required,
+    reason="ANTHROPIC_API_KEY not required when default model is not Anthropic",
+)
 def test_anthropic_api_key_non_empty_string():
     key = os.getenv("ANTHROPIC_API_KEY", "")
     assert len(key) > 10, f"ANTHROPIC_API_KEY is too short ({len(key)} chars)."
