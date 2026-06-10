@@ -55,54 +55,25 @@ def test_public_health_response_to_markdown():
     assert resp.disclaimer in md
 
 
-def test_agent_instantiates(anthropic_api_key):
+def test_agent_instantiates(bedrock_available):
     """
     The real _build_agent() function builds the agent without error.
 
-    This exercises AnthropicProvider(api_key=...) + AnthropicModel +
-    Agent(output_type=...) together, catching any API renames in one shot.
+    This exercises BedrockConverseModel + Agent(output_type=...) together,
+    catching any API renames in one shot.
     """
     from pubhealth_llm.app.agent import _build_agent
 
-    agent = _build_agent("anthropic:claude-sonnet-4-6")
+    agent = _build_agent("bedrock:us.amazon.nova-pro-v1:0")
     assert agent is not None
 
 
-def test_agent_has_eight_tools(anthropic_api_key):
+def test_agent_has_eight_tools(bedrock_available):
     """The agent must expose exactly the eight documented tools."""
     from pubhealth_llm.app.agent import _build_agent
 
-    agent = _build_agent("anthropic:claude-sonnet-4-6")
+    agent = _build_agent("bedrock:us.amazon.nova-pro-v1:0")
     # In PydanticAI 1.x, registered tools live in _function_toolset.tools (dict)
-    tool_names = set(agent._function_toolset.tools.keys())
-    expected = {
-        "tool_search_mmwr_reports",
-        "tool_get_health_statistics",
-        "tool_compare_locations",
-        "tool_get_available_measures",
-        "tool_get_worst_counties_by_measure",
-        "tool_rank_counties_composite",
-        "tool_get_mortality_data",
-        "tool_compare_mortality",
-    }
-    assert expected == tool_names, (
-        f"Tool mismatch.\n  Expected: {expected}\n  Found:    {tool_names}"
-    )
-
-
-def test_agent_instantiates_bedrock(bedrock_available):
-    """_build_agent() builds the agent with Bedrock Nova Pro without error."""
-    from pubhealth_llm.app.agent import _build_agent
-
-    agent = _build_agent("bedrock:us.amazon.nova-pro-v1:0")
-    assert agent is not None
-
-
-def test_agent_has_eight_tools_bedrock(bedrock_available):
-    """Bedrock-backed agent must expose exactly the eight documented tools."""
-    from pubhealth_llm.app.agent import _build_agent
-
-    agent = _build_agent("bedrock:us.amazon.nova-pro-v1:0")
     tool_names = set(agent._function_toolset.tools.keys())
     expected = {
         "tool_search_mmwr_reports",

@@ -5,7 +5,7 @@ These tests confirm that the agent calls multiple tools when a question
 requires data across multiple health measures — the exact failure mode
 observed with the over-trimmed system prompt on Groq.
 
-Requires: ANTHROPIC_API_KEY, healthgpt.db, chroma_db (all skipped if absent).
+Requires: AWS credentials (Bedrock), Aurora, S3 Vectors (all skipped if absent).
 """
 
 import pytest
@@ -21,7 +21,7 @@ load_dotenv(Path(__file__).parents[1] / ".env")
 # ---------------------------------------------------------------------------
 
 
-def test_get_worst_counties_diabetes_texas(db_path):
+def test_get_worst_counties_diabetes_texas(aurora_db):
     """get_worst_counties_by_measure returns ranked TX counties for diabetes."""
     from pubhealth_llm.app.tools import get_worst_counties_by_measure
 
@@ -34,7 +34,7 @@ def test_get_worst_counties_diabetes_texas(db_path):
     )
 
 
-def test_get_worst_counties_obesity_texas(db_path):
+def test_get_worst_counties_obesity_texas(aurora_db):
     """get_worst_counties_by_measure returns ranked TX counties for obesity."""
     from pubhealth_llm.app.tools import get_worst_counties_by_measure
 
@@ -43,7 +43,7 @@ def test_get_worst_counties_obesity_texas(db_path):
     assert len(result) > 50
 
 
-def test_get_worst_counties_physical_inactivity_texas(db_path):
+def test_get_worst_counties_physical_inactivity_texas(aurora_db):
     """get_worst_counties_by_measure returns ranked TX counties for physical inactivity."""
     from pubhealth_llm.app.tools import get_worst_counties_by_measure
 
@@ -55,7 +55,7 @@ def test_get_worst_counties_physical_inactivity_texas(db_path):
     )
 
 
-def test_get_health_statistics_travis_county(db_path):
+def test_get_health_statistics_travis_county(aurora_db):
     """get_health_statistics returns data for Travis County, TX."""
     from pubhealth_llm.app.tools import get_health_statistics
 
@@ -65,7 +65,7 @@ def test_get_health_statistics_travis_county(db_path):
     assert "Travis" in result, f"'Travis' not in result:\n{result}"
 
 
-def test_compare_locations_diabetes(db_path):
+def test_compare_locations_diabetes(aurora_db):
     """compare_locations returns comparison table for diabetes across TX counties."""
     from pubhealth_llm.app.tools import compare_locations
 
@@ -90,7 +90,7 @@ def test_search_mmwr_diabetes(s3v_index):
 
 @pytest.mark.asyncio
 async def test_agent_uses_composite_tool_for_multidimensional_question(
-    anthropic_api_key, db_path, s3v_index
+    bedrock_available, aurora_db, s3v_index
 ):
     """
     For a multi-measure prioritization question the agent must call
@@ -176,7 +176,7 @@ async def test_agent_uses_composite_tool_for_multidimensional_question(
 
 
 @pytest.mark.asyncio
-async def test_agent_response_contains_county_names(anthropic_api_key, db_path, s3v_index):
+async def test_agent_response_contains_county_names(bedrock_available, aurora_db, s3v_index):
     """
     For a Texas county prioritization question, the response must name
     at least one specific Texas county.
@@ -202,7 +202,7 @@ async def test_agent_response_contains_county_names(anthropic_api_key, db_path, 
 
 
 @pytest.mark.asyncio
-async def test_agent_response_has_statistics(anthropic_api_key, db_path, s3v_index):
+async def test_agent_response_has_statistics(bedrock_available, aurora_db, s3v_index):
     """
     For a statistics question, the agent must populate the statistics field
     with at least one StatisticEntry containing a numeric value.
@@ -228,7 +228,7 @@ async def test_agent_response_has_statistics(anthropic_api_key, db_path, s3v_ind
 
 
 @pytest.mark.asyncio
-async def test_agent_never_fabricates_when_db_empty(anthropic_api_key):
+async def test_agent_never_fabricates_when_db_empty(bedrock_available):
     """
     When no DB data is found (non-existent location), the agent must not
     fabricate statistics — it should report no data found.

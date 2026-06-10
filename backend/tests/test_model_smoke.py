@@ -1,29 +1,20 @@
 """
 Smoke test: one real run_agent() call to verify end-to-end model execution.
 
-This test is SKIPPED by default. It makes a live LLM API call and costs money.
-Run it after a model swap to confirm the new model works end-to-end.
-
-To run:
-    RUN_SMOKE=1 pytest tests/test_model_smoke.py -v
-
-Or via make:
-    RUN_SMOKE=1 make test-smoke   (if make target exists)
+Runs automatically as part of the full suite when AWS credentials and
+Aurora are available (gated by bedrock_available + aurora_db fixtures).
+To run in isolation:
+    pytest tests/test_model_smoke.py -v
 """
 
 import asyncio
-import os
-
 import pytest
 
 
-@pytest.mark.skipif(
-    os.getenv("RUN_SMOKE") != "1",
-    reason="Smoke test skipped by default. Set RUN_SMOKE=1 to run.",
-)
-def test_run_agent_smoke(_anthropic_api_key):
+def test_run_agent_smoke(bedrock_available, aurora_db):
     """
-    One real run_agent() call. Asserts a valid PublicHealthResponse is returned.
+    One real run_agent() call via Bedrock Nova Pro + Aurora.
+    Asserts a valid PublicHealthResponse is returned.
     This is the tripwire after a model swap — if this fails, the model config is broken.
     """
     from pubhealth_llm.app.agent import run_agent, AgentResult
