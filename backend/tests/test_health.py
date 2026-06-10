@@ -30,13 +30,8 @@ def test_health_has_version_key(client):
     assert "version" in resp.json()
 
 
-def test_health_has_data_key(client):
+def test_health_has_status_and_version_only(client):
+    """Health endpoint returns exactly status and version (no db path — Aurora-backed)."""
     resp = client.get("/health")
-    assert "data" in resp.json()
-
-
-def test_health_data_has_db_and_chroma(client):
-    resp = client.get("/health")
-    data = resp.json()["data"]
-    assert "db" in data
-    assert "chroma" in data
+    body = resp.json()
+    assert set(body.keys()) == {"status", "version"}

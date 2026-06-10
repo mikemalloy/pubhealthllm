@@ -1,7 +1,6 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, Request
@@ -11,11 +10,9 @@ from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
 from pubhealth_llm.app.config import validate_model_config
 from pubhealth_llm.app.orchestrator import run_ask
 from pubhealth_llm.app.schemas import AskRequest, AskResponse, MeasureItem
-from pubhealth_llm.app.tools import check_vector_store, list_available_measures
+from pubhealth_llm.app.tools import check_aurora_db, check_vector_store, list_available_measures
 
 logger = logging.getLogger(__name__)
-
-_DATA_DIR = Path(__file__).parent / "data"
 
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
@@ -55,9 +52,9 @@ async def lifespan(app: FastAPI):
 
     Runs in order:
     1. Validate model config (provider + API key present).
-    2. Assert baked data files exist (healthgpt.db and chroma_db/).
-    3. Vector store integrity check — loads the ChromaDB collection and
-       confirms it is non-empty.
+    2. Aurora Data API connectivity check — SELECT 1.
+    3. Vector store integrity check — confirms S3 Vectors index is reachable
+       and non-empty.
 
     Raises immediately on misconfiguration so the container dies at boot,
     not on the first request.
@@ -65,14 +62,8 @@ async def lifespan(app: FastAPI):
     # 1. Model config validation — raises ValueError or EnvironmentError on bad config
     validate_model_config()
 
-    # 2. Data presence checks
-    db_path = _DATA_DIR / "healthgpt.db"
-    chroma_path = _DATA_DIR / "chroma_db"
-
-    if not db_path.exists():
-        raise RuntimeError(f"Missing required data file: {db_path}")
-    if not chroma_path.is_dir():
-        raise RuntimeError(f"Missing required data directory: {chroma_path}")
+    # 2. Aurora Data API ping (warms cluster, confirms connectivity)
+    check_aurora_db()
 
     # 3. Vector store integrity check — raises RuntimeError if collection won't load
     check_vector_store()
@@ -139,10 +130,6 @@ def health():
     return {
         "status": "ok",
         "version": app.version,
-        "data": {
-            "db": str(_DATA_DIR / "healthgpt.db"),
-            "chroma": str(_DATA_DIR / "chroma_db"),
-        },
     }
 
 

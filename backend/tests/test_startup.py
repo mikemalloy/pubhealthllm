@@ -40,38 +40,37 @@ def test_startup_model_failure(monkeypatch):
             pass
 
 
-def test_startup_data_failure(monkeypatch, tmp_path):
-    """Lifespan raises RuntimeError when _DATA_DIR points to a nonexistent path.
+def test_startup_aurora_failure(monkeypatch):
+    """Lifespan raises RuntimeError when check_aurora_db raises.
 
-    Monkeypatches _DATA_DIR in server's namespace so the lifespan checks
-    a directory that doesn't exist.
+    Monkeypatches server.check_aurora_db to simulate Aurora connectivity failure.
     """
     import server  # noqa: PLC0415
 
-    nonexistent = tmp_path / "nonexistent"
-    monkeypatch.setattr("server._DATA_DIR", nonexistent)
+    def fail_aurora():
+        raise RuntimeError("Aurora connectivity check failed")
 
-    with pytest.raises(RuntimeError, match="Missing required data"):
+    monkeypatch.setattr("server.check_aurora_db", fail_aurora)
+
+    with pytest.raises(RuntimeError, match="Aurora"):
         with TestClient(server.app, raise_server_exceptions=True):
             pass
 
 
-def test_startup_data_failure_chroma(monkeypatch, tmp_path):
-    """Lifespan raises RuntimeError when chroma_db is absent but healthgpt.db exists.
+def test_startup_data_failure_missing_vector_bucket(monkeypatch):
+    """Lifespan raises RuntimeError when VECTOR_BUCKET is unset.
 
-    Creates a healthgpt.db file so the first check passes, then leaves
-    chroma_db absent. Exercises the is_dir() branch and would have caught
-    the exists() → is_dir() bug.
+    Aurora check passes (monkeypatched), then VECTOR_BUCKET is empty
+    so check_vector_store() raises.
     """
     import server  # noqa: PLC0415
+    import pubhealth_llm.app.tools as tools_mod
 
-    # First check passes — db file is present
-    (tmp_path / "healthgpt.db").touch()
-    # chroma_db is intentionally absent
+    # Aurora check passes
+    monkeypatch.setattr("server.check_aurora_db", lambda: None)
+    monkeypatch.setattr(tools_mod, "VECTOR_BUCKET", "")
 
-    monkeypatch.setattr("server._DATA_DIR", tmp_path)
-
-    with pytest.raises(RuntimeError, match="Missing required data"):
+    with pytest.raises(RuntimeError, match="VECTOR_BUCKET"):
         with TestClient(server.app, raise_server_exceptions=True):
             pass
 
@@ -79,10 +78,11 @@ def test_startup_data_failure_chroma(monkeypatch, tmp_path):
 def test_startup_vector_store_load_failure(monkeypatch):
     """Lifespan raises RuntimeError when check_vector_store raises a load failure.
 
-    Monkeypatches server.check_vector_store (in server's namespace) to simulate
-    chromadb collection failing to load. Keeps the test fully offline.
+    Monkeypatches both Aurora and vector store checks to stay fully offline.
     """
     import server  # noqa: PLC0415
+
+    monkeypatch.setattr("server.check_aurora_db", lambda: None)
 
     def fail_load():
         raise RuntimeError("MMWR vector store failed to load")
@@ -97,10 +97,11 @@ def test_startup_vector_store_load_failure(monkeypatch):
 def test_startup_vector_store_empty(monkeypatch):
     """Lifespan raises RuntimeError when check_vector_store raises an empty-store error.
 
-    Monkeypatches server.check_vector_store (in server's namespace) to simulate
-    the collection loading but having zero documents. Keeps the test fully offline.
+    Monkeypatches both Aurora and vector store checks to stay fully offline.
     """
     import server  # noqa: PLC0415
+
+    monkeypatch.setattr("server.check_aurora_db", lambda: None)
 
     def fail_empty():
         raise RuntimeError("MMWR vector store is empty")

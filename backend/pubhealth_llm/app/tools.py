@@ -104,6 +104,26 @@ def check_vector_store() -> None:
         raise RuntimeError("MMWR vector store is empty — run ingestion first")
 
 
+def check_aurora_db() -> None:
+    """Verify Aurora Data API is reachable.
+
+    Called from the FastAPI lifespan handler so the server fails at boot
+    rather than on the first tool call.
+
+    Raises:
+        RuntimeError: If AURORA_CLUSTER_ARN/AURORA_SECRET_ARN are not set,
+                      or the Data API returns an error on SELECT 1.
+    """
+    try:
+        result = get_db().query_one("SELECT 1 AS ping", {})
+    except ValueError as exc:
+        raise RuntimeError(f"Aurora configuration error: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Aurora connectivity check failed: {exc}") from exc
+    if result is None:
+        raise RuntimeError("Aurora ping returned None — cluster may be unavailable")
+
+
 # ---------------------------------------------------------------------------
 # Aurora Data API helper
 # ---------------------------------------------------------------------------
