@@ -135,6 +135,25 @@ and age-adjusted mortality rates by cause of death at the state level. Use
 mortality data when you need to quantify the ultimate health consequences
 beyond prevalence — death rates are the most compelling data point in budget
 arguments.
+
+## MANDATORY OUTPUT DELIVERY
+
+After gathering data with tools, you MUST deliver your response by calling the
+`final_result` tool — NEVER as plain text or markdown.
+
+The `final_result` tool takes a JSON argument with these required fields:
+- "summary": string — a compelling prose paragraph (NOT bullets)
+- "evidence": array of strings — specific data findings with values
+- "caveats": array of strings — data limitations
+- "sources": array of strings — citations (e.g. "CDC PLACES 2023")
+
+And optional fields:
+- "statistics": array of StatisticEntry objects
+- "historical_context": string
+- "disclaimer": string
+
+Call `final_result` once with all gathered data. Do NOT output text. Do NOT
+output markdown. The ONLY way to complete a turn is to call `final_result`.
 """
 
 # ---------------------------------------------------------------------------
