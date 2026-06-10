@@ -366,57 +366,53 @@ def get_health_statistics(
     Returns:
         Formatted table of health statistics, or an error message.
     """
-    if not DB_PATH.exists():
+    try:
+        fips = resolve_location(location, state)
+    except ValueError as exc:
         return (
-            "Health statistics database not found. "
-            "Run: `python -m pubhealth_llm.data_ingestion.download_county_data`"
+            f"No health statistics found: {exc} "
+            "Try a broader search term or check get_available_measures()."
         )
 
-    # Normalise the location string: strip " County" / " Parish" suffixes and
-    # extract any trailing state abbreviation (e.g. "Cook County, IL" → "Cook",
-    # state_hint="IL").  The DB stores bare names like "Cook", not "Cook County".
-    location, state_hint = _normalize_location(location)
-    # Caller-supplied state= takes precedence; fall back to hint from the name.
-    effective_state = (state or state_hint or "").upper() or None
-
-    conditions = ["(LocationName LIKE ? OR StateDesc LIKE ? OR StateAbbr LIKE ?)"]
-    params: list = [f"%{location}%", f"%{location}%", f"%{location}%"]
-
-    if effective_state:
-        conditions.append("StateAbbr = ?")
-        params.append(effective_state)
+    conditions = ["hf.location_fips = :fips"]
+    params: dict = {"fips": fips}
 
     if measure:
-        # Short_Question_Text has the most readable measure names (e.g.
-        # "Diabetes" vs the longer Measure column).  We also match Measure
-        # and MeasureId for completeness.
-        conditions.append(
-            "(Short_Question_Text LIKE ? OR Measure LIKE ? OR MeasureId LIKE ?)"
-        )
-        params.extend([f"%{measure}%", f"%{measure}%", f"%{measure}%"])
+        try:
+            measure_id = resolve_measure(measure)
+            conditions.append("hf.measure_id = :measure_id")
+            params["measure_id"] = measure_id
+        except ValueError:
+            # Soft fallback: ILIKE so partial keywords still return results
+            conditions.append(
+                "(m.name ILIKE :measure_kw OR m.short_text ILIKE :measure_kw)"
+            )
+            params["measure_kw"] = f"%{measure}%"
 
     where_clause = " AND ".join(conditions)
     sql = f"""
         SELECT
-            LocationName,
-            StateAbbr,
-            Measure,
-            Short_Question_Text,
-            Data_Value,
-            Data_Value_Unit,
-            Data_Value_Type,
-            Year,
-            Low_Confidence_Limit,
-            High_Confidence_Limit,
-            TotalPopulation
-        FROM {TABLE_COUNTY}
+            l.name            AS "LocationName",
+            l.state_abbr      AS "StateAbbr",
+            m.name            AS "Measure",
+            m.short_text      AS "Short_Question_Text",
+            hf.value          AS "Data_Value",
+            m.unit            AS "Data_Value_Unit",
+            hf.value_type     AS "Data_Value_Type",
+            hf.year           AS "Year",
+            hf.low_ci         AS "Low_Confidence_Limit",
+            hf.high_ci        AS "High_Confidence_Limit",
+            hf.population     AS "TotalPopulation"
+        FROM health_facts hf
+        JOIN locations l ON l.fips = hf.location_fips
+        JOIN measures m ON m.measure_id = hf.measure_id
         WHERE {where_clause}
-          AND Data_Value IS NOT NULL
-        ORDER BY Year DESC, Measure
+          AND hf.value IS NOT NULL
+        ORDER BY hf.year DESC, m.name
         LIMIT {SQL_MAX_ROWS}
     """
 
-    rows = _query_db(sql, tuple(params))
+    rows = _query_db(sql, params)
 
     if not rows:
         return (
@@ -426,7 +422,6 @@ def get_health_statistics(
             + ". Try a broader search term or check get_available_measures()."
         )
 
-    # Format output
     lines = [
         f"CDC PLACES Health Statistics — {location}"
         + (f" ({state})" if state else ""),
@@ -487,9 +482,6 @@ def compare_locations(locations: list[str], measure: str) -> str:
     Returns:
         Ranked comparison table as formatted text, or an error message.
     """
-    if not DB_PATH.exists():
-        return "Health statistics database not found. Run ingestion first."
-
     if not locations:
         return "No locations provided. Pass a list of at least 2 location names."
 
@@ -497,43 +489,55 @@ def compare_locations(locations: list[str], measure: str) -> str:
         locations = locations[:10]
         logger.warning("compare_locations truncated to 10 locations")
 
-    # Normalise each location: strip " County" suffix and extract state hints.
-    # When a state hint is present (e.g. "Cook County, IL" → "Cook", "IL") we
-    # build a tighter condition (LocationName LIKE ? AND StateAbbr = ?) instead
-    # of the broad three-column OR, avoiding false matches across states.
-    location_parts: list[str] = []
-    location_params: list[str] = []
+    # Resolve measure keyword → measure_id
+    try:
+        measure_id = resolve_measure(measure)
+    except ValueError as exc:
+        return (
+            f"No comparison data found for measure='{measure}': {exc} "
+            "Try get_available_measures() to see valid measure names."
+        )
+
+    # Resolve each location → FIPS
+    fips_list: list[str] = []
+    skipped: list[str] = []
     for loc in locations:
-        norm, state_hint = _normalize_location(loc)
-        if state_hint:
-            location_parts.append("(LocationName LIKE ? AND StateAbbr = ?)")
-            location_params.extend([f"%{norm}%", state_hint])
-        else:
-            location_parts.append(
-                "(LocationName LIKE ? OR StateDesc LIKE ? OR StateAbbr LIKE ?)"
-            )
-            location_params.extend([f"%{norm}%", f"%{norm}%", f"%{norm}%"])
-    location_conditions = " OR ".join(location_parts)
+        try:
+            fips_list.append(resolve_location(loc))
+        except ValueError as exc:
+            logger.warning("compare_locations: skipping '%s': %s", loc, exc)
+            skipped.append(loc)
+
+    if not fips_list:
+        return (
+            f"No locations could be resolved for measure='{measure}'. "
+            f"Unresolved: {', '.join(skipped)}. "
+            "Include state abbreviations (e.g. 'Cook County, IL')."
+        )
+
+    fips_placeholders = ", ".join(f":fips_{i}" for i in range(len(fips_list)))
+    fips_params = {f"fips_{i}": f for i, f in enumerate(fips_list)}
 
     sql = f"""
         SELECT
-            LocationName,
-            StateAbbr,
-            Measure,
-            Data_Value,
-            Data_Value_Unit,
-            Data_Value_Type,
-            Year
-        FROM {TABLE_COUNTY}
-        WHERE ({location_conditions})
-          AND (Short_Question_Text LIKE ? OR Measure LIKE ? OR MeasureId LIKE ?)
-          AND Data_Value IS NOT NULL
-        ORDER BY Data_Value DESC
+            l.name        AS "LocationName",
+            l.state_abbr  AS "StateAbbr",
+            m.name        AS "Measure",
+            hf.value      AS "Data_Value",
+            m.unit        AS "Data_Value_Unit",
+            hf.value_type AS "Data_Value_Type",
+            hf.year       AS "Year"
+        FROM health_facts hf
+        JOIN locations l ON l.fips = hf.location_fips
+        JOIN measures m ON m.measure_id = hf.measure_id
+        WHERE hf.location_fips IN ({fips_placeholders})
+          AND hf.measure_id = :measure_id
+          AND hf.value IS NOT NULL
+        ORDER BY hf.value DESC
         LIMIT {SQL_MAX_ROWS}
     """
-    params = location_params + [f"%{measure}%", f"%{measure}%", f"%{measure}%"]
-
-    rows = _query_db(sql, tuple(params))
+    params = {**fips_params, "measure_id": measure_id}
+    rows = _query_db(sql, params)
 
     if not rows:
         return (

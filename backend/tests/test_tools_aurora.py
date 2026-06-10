@@ -135,3 +135,58 @@ def test_resolve_measure_not_found_raises(aurora_db):
     import pytest
     with pytest.raises(ValueError, match="not found"):
         resolve_measure("zzz_nonexistent_measure_xyz")
+
+
+# ---------------------------------------------------------------------------
+# Task 3: get_health_statistics + compare_locations
+# ---------------------------------------------------------------------------
+
+def test_get_health_statistics_travis_diabetes(aurora_db):
+    """Travis County TX diabetes returns a formatted string with a numeric value."""
+    from pubhealth_llm.app.tools import get_health_statistics
+    result = get_health_statistics("Travis County, TX", measure="diabetes")
+    assert isinstance(result, str)
+    assert "not found" not in result.lower(), f"Unexpected not-found: {result[:300]}"
+    assert "Travis" in result
+    assert "TX" in result
+
+
+def test_get_health_statistics_cook_obesity(aurora_db):
+    """Cook County IL obesity returns data."""
+    from pubhealth_llm.app.tools import get_health_statistics
+    result = get_health_statistics("Cook County, IL", measure="obesity")
+    assert isinstance(result, str)
+    assert "not found" not in result.lower(), f"Unexpected not-found: {result[:300]}"
+    assert "Cook" in result
+
+
+def test_get_health_statistics_unknown_location(aurora_db):
+    """Unknown location returns a 'not found' string, not an exception."""
+    from pubhealth_llm.app.tools import get_health_statistics
+    result = get_health_statistics("ZZZNoSuchCounty999")
+    assert isinstance(result, str)
+    assert "not found" in result.lower() or "no health" in result.lower()
+
+
+def test_compare_locations_cook_harris(aurora_db):
+    """compare_locations works for Cook County IL + Harris County TX."""
+    from pubhealth_llm.app.tools import compare_locations
+    result = compare_locations(
+        ["Cook County, IL", "Harris County, TX"],
+        measure="obesity",
+    )
+    assert isinstance(result, str)
+    assert "not found" not in result.lower(), f"Unexpected not-found: {result[:300]}"
+    assert "Cook" in result
+    assert "Harris" in result
+
+
+def test_compare_locations_unknown_measure(aurora_db):
+    """Unknown measure returns 'not found' string."""
+    from pubhealth_llm.app.tools import compare_locations
+    result = compare_locations(
+        ["Travis County, TX", "Harris County, TX"],
+        measure="zzz_fake_measure_xyz",
+    )
+    assert isinstance(result, str)
+    assert "not found" in result.lower() or "no comparison" in result.lower()
