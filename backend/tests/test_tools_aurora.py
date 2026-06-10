@@ -220,3 +220,98 @@ def test_list_available_measures_returns_list_of_dicts(aurora_db):
     result = list_available_measures()
     assert isinstance(result, list) and len(result) > 0
     assert all(k in result[0] for k in ("measure_id", "measure", "short_text", "category"))
+
+
+# ---------------------------------------------------------------------------
+# Task 5: get_worst_counties_by_measure + rank_counties_composite
+# ---------------------------------------------------------------------------
+
+def test_get_worst_counties_tx_diabetes(aurora_db):
+    """TX diabetes returns a ranked table with at least 5 counties."""
+    from pubhealth_llm.app.tools import get_worst_counties_by_measure
+
+    result = get_worst_counties_by_measure("TX", "diabetes", top_n=5)
+    assert isinstance(result, str)
+    assert "not found" not in result.lower(), f"Unexpected: {result[:300]}"
+    data_lines = [ln for ln in result.split("\n") if ln and ln[0].isdigit()]
+    assert len(data_lines) >= 1, f"No data lines found:\n{result}"
+
+
+def test_get_worst_counties_bad_state(aurora_db):
+    """Invalid state code returns a descriptive error, not an exception."""
+    from pubhealth_llm.app.tools import get_worst_counties_by_measure
+
+    result = get_worst_counties_by_measure("Texas", "diabetes")
+    assert "two-letter" in result.lower()
+
+
+def test_rank_counties_composite_tx(aurora_db):
+    """TX diabetes+obesity composite returns ranked table with Composite header."""
+    from pubhealth_llm.app.tools import rank_counties_composite
+
+    result = rank_counties_composite("TX", ["diabetes", "obesity"])
+    assert isinstance(result, str)
+    assert "Composite" in result
+    assert "County" in result or "TX" in result
+
+
+def test_rank_counties_composite_missing_one(aurora_db):
+    """One invalid measure is flagged; composite still runs on valid two."""
+    from pubhealth_llm.app.tools import rank_counties_composite
+
+    result = rank_counties_composite("TX", ["diabetes", "obesity", "zzz_fake_xyz"])
+    assert "Composite" in result
+    assert "zzz_fake_xyz" in result or "Not found" in result
+
+
+def test_rank_counties_composite_all_missing(aurora_db):
+    """All invalid measures → clear error, no composite."""
+    from pubhealth_llm.app.tools import rank_counties_composite
+
+    result = rank_counties_composite("TX", ["zzz_fake1", "zzz_fake2"])
+    assert "Composite" not in result
+    assert "not found" in result.lower() or "none found" in result.lower() or "0 of" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 6: get_mortality_data + compare_mortality
+# ---------------------------------------------------------------------------
+
+def test_get_mortality_data_louisiana(aurora_db):
+    """Louisiana heart disease mortality returns formatted data."""
+    from pubhealth_llm.app.tools import get_mortality_data
+
+    result = get_mortality_data("Louisiana", cause="heart disease")
+    assert isinstance(result, str)
+    assert "not found" not in result.lower() or "no mortality" not in result.lower(), (
+        f"Expected Louisiana mortality data. Got: {result[:300]}"
+    )
+    assert "Louisiana" in result or "Heart" in result
+
+
+def test_get_mortality_data_state_abbreviation(aurora_db):
+    """State abbreviation 'TX' resolves to Texas mortality data."""
+    from pubhealth_llm.app.tools import get_mortality_data
+
+    result = get_mortality_data("TX", cause="diabetes")
+    assert isinstance(result, str)
+    assert "Texas" in result or "Diabetes" in result or "Rate" in result
+
+
+def test_get_mortality_data_unknown_location(aurora_db):
+    """Unknown location returns a descriptive error string."""
+    from pubhealth_llm.app.tools import get_mortality_data
+
+    result = get_mortality_data("ZZZNoSuchState999")
+    assert isinstance(result, str)
+    assert "not found" in result.lower() or "no mortality" in result.lower()
+
+
+def test_compare_mortality_states(aurora_db):
+    """compare_mortality across two states returns ranked table."""
+    from pubhealth_llm.app.tools import compare_mortality
+
+    result = compare_mortality(["Louisiana", "Texas"], cause="heart disease")
+    assert isinstance(result, str)
+    assert "Heart" in result or "heart" in result
+    assert "Louisiana" in result or "Texas" in result

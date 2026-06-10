@@ -720,57 +720,56 @@ def get_worst_counties_by_measure(
         confidence intervals, and population. Returns an error string
         if no data is found.
     """
-    if not DB_PATH.exists():
-        return (
-            "Health statistics database not found. "
-            "Run: `python -m pubhealth_llm.data_ingestion.download_county_data`"
-        )
-
     if not state or len(state.strip()) != 2:
         return (
             "A two-letter state abbreviation is required (e.g. 'TX'). "
             "For multi-state queries, call this tool once per state."
         )
 
-    top_n = min(max(1, top_n), 50)  # clamp to [1, 50]
+    top_n = min(max(1, top_n), 50)
+    state_upper = state.upper().strip()
 
-    sql = f"""
+    try:
+        measure_id = resolve_measure(measure)
+    except ValueError as exc:
+        return (
+            f"No data found for measure='{measure}' in state='{state_upper}': {exc} "
+            "Try get_available_measures() to see valid measure keywords."
+        )
+
+    sql = """
         SELECT
-            LocationName,
-            StateAbbr,
-            Short_Question_Text,
-            Measure,
-            Data_Value,
-            Data_Value_Unit,
-            Low_Confidence_Limit,
-            High_Confidence_Limit,
-            TotalPopulation,
-            Year
-        FROM {TABLE_COUNTY}
-        WHERE StateAbbr = ?
-          AND (Short_Question_Text LIKE ? OR Measure LIKE ?)
-          AND Data_Value IS NOT NULL
-        ORDER BY Data_Value DESC
-        LIMIT ?
+            l.name        AS "LocationName",
+            l.state_abbr  AS "StateAbbr",
+            m.short_text  AS "Short_Question_Text",
+            m.name        AS "Measure",
+            hf.value      AS "Data_Value",
+            m.unit        AS "Data_Value_Unit",
+            hf.low_ci     AS "Low_Confidence_Limit",
+            hf.high_ci    AS "High_Confidence_Limit",
+            hf.population AS "TotalPopulation",
+            hf.year       AS "Year"
+        FROM health_facts hf
+        JOIN locations l ON l.fips = hf.location_fips
+        JOIN measures m ON m.measure_id = hf.measure_id
+        WHERE l.state_abbr = :state
+          AND hf.measure_id = :measure_id
+          AND hf.value IS NOT NULL
+          AND l.geo_level = 'county'
+        ORDER BY hf.value DESC
+        LIMIT :top_n
     """
-    params = (
-        state.upper().strip(),
-        f"%{measure}%",
-        f"%{measure}%",
-        top_n,
-    )
 
-    rows = _query_db(sql, params)
+    rows = _query_db(sql, {"state": state_upper, "measure_id": measure_id, "top_n": top_n})
 
     if not rows:
         return (
-            f"No data found for measure='{measure}' in state='{state.upper()}'. "
+            f"No data found for measure='{measure}' in state='{state_upper}'. "
             "Try get_available_measures() to see valid measure keywords."
         )
 
     measure_label = rows[0].get("Short_Question_Text") or rows[0].get("Measure", measure)
     unit = rows[0].get("Data_Value_Unit") or "%"
-    state_upper = state.upper().strip()
 
     lines = [
         f"Worst Counties by '{measure_label}' in {state_upper} "
@@ -858,12 +857,6 @@ def rank_counties_composite(
     """
     import statistics as _stats
 
-    if not DB_PATH.exists():
-        return (
-            "Health statistics database not found. "
-            "Run: `python -m pubhealth_llm.data_ingestion.download_county_data`"
-        )
-
     if not state or len(state.strip()) != 2:
         return "A two-letter state abbreviation is required (e.g. 'TX')."
 
@@ -883,39 +876,46 @@ def rank_counties_composite(
     # ------------------------------------------------------------------
     # Fetch all-county data per measure (most recent year, no LIMIT)
     # ------------------------------------------------------------------
-    # measure_rows[kw] = {county_name: row_dict}
     measure_rows: dict[str, dict[str, dict]] = {}
     resolved: list[tuple[str, str, str, int]] = []  # (kw, label, unit, year)
     missing: list[str] = []
 
     for kw in measures:
-        sql = f"""
-            SELECT LocationName, Data_Value, Short_Question_Text,
-                   Data_Value_Unit, Year, Data_Value_Type
-            FROM {TABLE_COUNTY}
-            WHERE StateAbbr = ?
-              AND (Short_Question_Text LIKE ? OR Measure LIKE ?)
-              AND Data_Value IS NOT NULL
-              AND Year = (
-                  SELECT MAX(Year) FROM {TABLE_COUNTY}
-                  WHERE StateAbbr = ?
-                    AND (Short_Question_Text LIKE ? OR Measure LIKE ?)
-                    AND Data_Value IS NOT NULL
+        try:
+            measure_id = resolve_measure(kw)
+        except ValueError:
+            missing.append(kw)
+            continue
+
+        sql = """
+            SELECT l.name AS "LocationName", hf.value AS "Data_Value",
+                   m.short_text AS "Short_Question_Text",
+                   m.unit AS "Data_Value_Unit", hf.year AS "Year",
+                   hf.value_type AS "Data_Value_Type"
+            FROM health_facts hf
+            JOIN locations l ON l.fips = hf.location_fips
+            JOIN measures m ON m.measure_id = hf.measure_id
+            WHERE l.state_abbr = :state
+              AND hf.measure_id = :measure_id
+              AND hf.value IS NOT NULL
+              AND l.geo_level = 'county'
+              AND hf.year = (
+                  SELECT MAX(hf2.year)
+                  FROM health_facts hf2
+                  JOIN locations l2 ON l2.fips = hf2.location_fips
+                  WHERE l2.state_abbr = :state
+                    AND hf2.measure_id = :measure_id
+                    AND hf2.value IS NOT NULL
               )
-            ORDER BY LocationName, Data_Value_Type
+            ORDER BY l.name, hf.value_type
         """
-        params = (
-            state_upper, f"%{kw}%", f"%{kw}%",
-            state_upper, f"%{kw}%", f"%{kw}%",
-        )
-        rows = _query_db(sql, params)
+        rows = _query_db(sql, {"state": state_upper, "measure_id": measure_id})
 
         if not rows:
             missing.append(kw)
             continue
 
-        # Deduplicate: one row per county (first Data_Value_Type alphabetically
-        # so "Age-adjusted" is consistently preferred over "Crude" prevalence)
+        # Deduplicate: one row per county
         county_vals: dict[str, dict] = {}
         for row in rows:
             if row["LocationName"] not in county_vals:
@@ -1101,107 +1101,101 @@ def get_mortality_data(
     Returns:
         Formatted mortality table as a string, or a descriptive error message.
     """
-    if not _mortality_table_exists():
-        return _MORTALITY_NO_DATA_MSG
-
-    # --- Resolve location to what's in the DB ---
-    # The DB stores state names in county_name and state columns.
-    # We try increasingly broad matches so that e.g. "LA" finds "Louisiana"
-    # and "East Baton Rouge" falls back to "Louisiana".
-
-    STATE_ABBR_MAP = {
-        "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
-        "CA": "California", "CO": "Colorado", "CT": "Connecticut",
-        "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
-        "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
-        "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
-        "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan",
-        "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
-        "MT": "Montana", "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire",
-        "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
-        "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
-        "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
-        "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
-        "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
-        "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
-        "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
-    }
+    # Resolve location → FIPS, then determine state_fips for mortality query
+    try:
+        fips = resolve_location(location)
+    except ValueError as exc:
+        return (
+            f"No mortality data found for location='{location}': {exc}\n"
+            "Available locations are U.S. state names and 'United States'.\n"
+            "Example: get_mortality_data('Louisiana') or get_mortality_data('Texas', cause='diabetes')"
+        )
 
     location_note = ""
-    resolved_location = location.strip()
 
-    # If two-letter abbreviation, expand to full state name
-    abbr_upper = resolved_location.upper()
-    if abbr_upper in STATE_ABBR_MAP:
-        resolved_location = STATE_ABBR_MAP[abbr_upper]
-
-    # Build SQL — try exact/partial match on county_name (= state name in our data)
-    year_sql = ""
-    year_params: list = []
-    if year:
-        year_sql = "AND year = ?"
-        year_params = [year]
+    if fips == "00":
+        # National data — state_fips IS NULL in mortality_facts
+        state_fips = None
+        display_name = "United States"
+    elif len(fips) == 5:
+        # County FIPS — fall back to state level
+        state_fips = fips[:2]
+        location_note = (
+            f"\nNOTE: '{location}' is county-level; falling back to "
+            f"state-level mortality data. "
+            "Parish/county-level mortality data requires manual download from "
+            "https://wonder.cdc.gov/ucd-icd10.html"
+        )
+        row = get_db().query_one(
+            "SELECT name FROM locations WHERE fips = :fips AND geo_level = 'state'",
+            {"fips": state_fips},
+        )
+        display_name = row["name"] if row else state_fips
     else:
-        year_sql = "AND year = (SELECT MAX(year) FROM " + TABLE_MORTALITY + ")"
+        # 2-digit state FIPS
+        state_fips = fips
+        row = get_db().query_one(
+            "SELECT name FROM locations WHERE fips = :fips AND geo_level = 'state'",
+            {"fips": state_fips},
+        )
+        display_name = row["name"] if row else fips
 
-    cause_sql = ""
-    cause_params: list = []
+    # Build SQL parameters
+    params: dict = {}
+    if state_fips is None:
+        fips_condition = "mf.state_fips IS NULL"
+    else:
+        fips_condition = "mf.state_fips = :state_fips"
+        params["state_fips"] = state_fips
+
+    year_condition = ""
+    if year:
+        year_condition = "AND mf.year = :year"
+        params["year"] = year
+    else:
+        year_condition = "AND mf.year = (SELECT MAX(year) FROM mortality_facts)"
+
+    cause_condition = ""
     if cause:
-        cause_sql = "AND (cause_of_death LIKE ? OR icd10_code LIKE ?)"
-        cause_params = [f"%{cause}%", f"%{cause}%"]
+        cause_condition = "AND (mf.cause ILIKE :cause OR mf.icd10 ILIKE :cause)"
+        params["cause"] = f"%{cause}%"
 
     limit_sql = "LIMIT 10" if not cause else "LIMIT 20"
 
     sql = f"""
-        SELECT county_name, cause_of_death, icd10_code,
-               deaths, crude_rate, age_adjusted_rate, year
-        FROM {TABLE_MORTALITY}
-        WHERE county_name LIKE ?
-          {year_sql}
-          {cause_sql}
-        ORDER BY age_adjusted_rate DESC NULLS LAST, deaths DESC NULLS LAST
+        SELECT
+            :display_name        AS county_name,
+            mf.cause             AS cause_of_death,
+            mf.icd10             AS icd10_code,
+            mf.deaths            AS deaths,
+            mf.crude_rate        AS crude_rate,
+            mf.age_adjusted_rate AS age_adjusted_rate,
+            mf.year              AS year
+        FROM mortality_facts mf
+        WHERE {fips_condition}
+          {year_condition}
+          {cause_condition}
+        ORDER BY mf.age_adjusted_rate DESC NULLS LAST, mf.deaths DESC NULLS LAST
         {limit_sql}
     """
-    params = [f"%{resolved_location}%"] + year_params + cause_params
-    rows = _query_db(sql, tuple(params))
+    params["display_name"] = display_name
 
-    # Fallback: if no rows found and input looks like a county/parish,
-    # try to infer state from context (not feasible without a full FIPS map)
-    # — just report clearly that only state-level data exists
+    rows = _query_db(sql, params)
+
     if not rows:
-        location_note = (
-            f"\nNOTE: No mortality data found for '{location}'. "
-            "This dataset is state-level only (1999–2017). "
-            "Try the full state name (e.g. 'Louisiana') or 'United States'."
-        )
-        # Try United States as a last resort if no location match at all
-        if not cause:
-            return (
-                f"No mortality data found for location='{location}'.\n"
-                "Available locations are U.S. state names and 'United States'.\n"
-                "Example: get_mortality_data('Louisiana') or get_mortality_data('Texas', cause='diabetes')"
-            )
         return (
-            f"No mortality data found for location='{location}', cause='{cause}'.\n"
-            "This dataset covers U.S. state-level data. Try a state name like 'Louisiana'.\n"
-            + location_note
-        )
-
-    # Check if location was resolved from something sub-state (e.g. parish name)
-    first_location = rows[0].get("county_name", resolved_location)
-    if first_location.lower() != resolved_location.lower():
-        location_note = (
-            f"\nNOTE: '{location}' resolved to state-level data for '{first_location}'. "
-            "Parish/county-level mortality data requires manual download from "
-            "https://wonder.cdc.gov/ucd-icd10.html"
+            f"No mortality data found for location='{location}'"
+            + (f", cause='{cause}'" if cause else "")
+            + ".\n"
+            "Available locations are U.S. state names and 'United States'.\n"
+            "Example: get_mortality_data('Louisiana') or get_mortality_data('Texas', cause='diabetes')"
         )
 
     cause_label = cause if cause else "all causes (top 10 by age-adjusted rate)"
-    title_location = first_location
     year_val = rows[0].get("year", "N/A")
 
     lines = [
-        f"CDC Mortality Data — {title_location} | {cause_label} | Year: {year_val}",
+        f"CDC Mortality Data — {display_name} | {cause_label} | Year: {year_val}",
         f"{'Cause of Death':<40} {'Deaths':>8} {'Crude Rate':>12} {'Age-Adj Rate':>14}",
         "-" * 78,
     ]
@@ -1268,9 +1262,6 @@ def compare_mortality(locations: list[str], cause: str) -> str:
         Ranked comparison table sorted by age-adjusted rate descending,
         or a descriptive error message.
     """
-    if not _mortality_table_exists():
-        return _MORTALITY_NO_DATA_MSG
-
     if not locations:
         return "No locations provided. Pass a list of state names to compare."
 
@@ -1281,32 +1272,76 @@ def compare_mortality(locations: list[str], cause: str) -> str:
         locations = locations[:15]
         logger.warning("compare_mortality truncated to 15 locations")
 
-    # Build OR conditions for all locations
-    loc_conditions = " OR ".join(["county_name LIKE ?"] * len(locations))
-    loc_params = [f"%{loc}%" for loc in locations]
+    # Resolve each location → FIPS → state_fips
+    state_fips_list: list[str] = []
+    skipped: list[str] = []
+    national = False
+
+    for loc in locations:
+        try:
+            fips = resolve_location(loc)
+        except ValueError as exc:
+            logger.warning("compare_mortality: skipping '%s': %s", loc, exc)
+            skipped.append(loc)
+            continue
+
+        if fips == "00":
+            national = True
+        elif len(fips) == 5:
+            state_fips_list.append(fips[:2])
+        else:
+            state_fips_list.append(fips)
+
+    if not state_fips_list and not national:
+        return (
+            f"No mortality data found for cause='{cause}' across "
+            f"locations: {', '.join(locations)}.\n"
+            "Data is state-level. Try full state names like 'Louisiana', 'Texas'.\n"
+            f"Use get_mortality_data('United States', cause='{cause}') for national data."
+        )
+
+    # Build FIPS conditions
+    conditions: list[str] = []
+    params: dict = {"cause": f"%{cause}%"}
+
+    if national:
+        conditions.append("mf.state_fips IS NULL")
+
+    for i, sfips in enumerate(state_fips_list):
+        key = f"sfips_{i}"
+        conditions.append(f"mf.state_fips = :{key}")
+        params[key] = sfips
+
+    fips_condition = " OR ".join(conditions)
 
     sql = f"""
-        SELECT county_name, cause_of_death,
-               deaths, crude_rate, age_adjusted_rate, year
-        FROM {TABLE_MORTALITY}
-        WHERE ({loc_conditions})
-          AND (cause_of_death LIKE ? OR icd10_code LIKE ?)
-          AND year = (SELECT MAX(year) FROM {TABLE_MORTALITY})
-        ORDER BY age_adjusted_rate DESC NULLS LAST, deaths DESC NULLS LAST
+        SELECT
+            COALESCE(l.name, 'United States') AS county_name,
+            mf.cause             AS cause_of_death,
+            mf.deaths            AS deaths,
+            mf.crude_rate        AS crude_rate,
+            mf.age_adjusted_rate AS age_adjusted_rate,
+            mf.year              AS year
+        FROM mortality_facts mf
+        LEFT JOIN locations l ON l.fips = mf.state_fips AND l.geo_level = 'state'
+        WHERE ({fips_condition})
+          AND (mf.cause ILIKE :cause OR mf.icd10 ILIKE :cause)
+          AND mf.year = (SELECT MAX(year) FROM mortality_facts)
+        ORDER BY mf.age_adjusted_rate DESC NULLS LAST, mf.deaths DESC NULLS LAST
         LIMIT 30
     """
-    params = loc_params + [f"%{cause}%", f"%{cause}%"]
-    rows = _query_db(sql, tuple(params))
+
+    rows = _query_db(sql, params)
 
     if not rows:
         return (
             f"No mortality data found for cause='{cause}' across "
             f"locations: {', '.join(locations)}.\n"
             "Data is state-level. Try full state names like 'Louisiana', 'Texas'.\n"
-            "Use get_mortality_data('United States', cause='{cause}') for national data."
+            f"Use get_mortality_data('United States', cause='{cause}') for national data."
         )
 
-    # Deduplicate — one row per location (most recent, highest-burden match)
+    # Deduplicate — one row per location
     seen: set[str] = set()
     deduped: list[dict] = []
     for row in rows:
