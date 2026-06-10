@@ -254,7 +254,7 @@ def test_compare_locations_bad_measure(db_path):
 # ---------------------------------------------------------------------------
 
 
-def test_search_mmwr_returns_string(chroma_dir):
+def test_search_mmwr_returns_string(s3v_index):
     """search_mmwr_reports returns a non-empty string."""
     from pubhealth_llm.app.tools import search_mmwr_reports
 
@@ -263,7 +263,7 @@ def test_search_mmwr_returns_string(chroma_dir):
     assert len(result) > 0
 
 
-def test_search_mmwr_result_contains_source(chroma_dir):
+def test_search_mmwr_result_contains_source(s3v_index):
     """Results must reference a source file."""
     from pubhealth_llm.app.tools import search_mmwr_reports
 
@@ -273,11 +273,10 @@ def test_search_mmwr_result_contains_source(chroma_dir):
     )
 
 
-def test_search_mmwr_missing_chroma(tmp_path, monkeypatch):
-    """Returns an error string (not an exception) when ChromaDB is missing."""
+def test_search_mmwr_missing_chroma(monkeypatch):
+    """Returns an error string (not an exception) when vector store is unavailable."""
     import pubhealth_llm.app.tools as tools_mod
-    monkeypatch.setattr(tools_mod, "CHROMA_DIR", tmp_path / "no_chroma")
-    monkeypatch.setattr(tools_mod, "_chroma_collection", None)
+    monkeypatch.setattr(tools_mod, "VECTOR_BUCKET", "")
 
     from pubhealth_llm.app.tools import search_mmwr_reports
     result = search_mmwr_reports("any query")

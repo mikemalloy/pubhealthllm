@@ -74,7 +74,7 @@ def test_compare_locations_diabetes(db_path):
     assert len(result) > 50
 
 
-def test_search_mmwr_diabetes(chroma_dir):
+def test_search_mmwr_diabetes(s3v_index):
     """search_mmwr_reports returns passages for a diabetes query."""
     from pubhealth_llm.app.tools import search_mmwr_reports
 
@@ -90,7 +90,7 @@ def test_search_mmwr_diabetes(chroma_dir):
 
 @pytest.mark.asyncio
 async def test_agent_uses_composite_tool_for_multidimensional_question(
-    anthropic_api_key, db_path, chroma_dir
+    anthropic_api_key, db_path, s3v_index
 ):
     """
     For a multi-measure prioritization question the agent must call
@@ -176,7 +176,7 @@ async def test_agent_uses_composite_tool_for_multidimensional_question(
 
 
 @pytest.mark.asyncio
-async def test_agent_response_contains_county_names(anthropic_api_key, db_path, chroma_dir):
+async def test_agent_response_contains_county_names(anthropic_api_key, db_path, s3v_index):
     """
     For a Texas county prioritization question, the response must name
     at least one specific Texas county.
@@ -202,7 +202,7 @@ async def test_agent_response_contains_county_names(anthropic_api_key, db_path, 
 
 
 @pytest.mark.asyncio
-async def test_agent_response_has_statistics(anthropic_api_key, db_path, chroma_dir):
+async def test_agent_response_has_statistics(anthropic_api_key, db_path, s3v_index):
     """
     For a statistics question, the agent must populate the statistics field
     with at least one StatisticEntry containing a numeric value.

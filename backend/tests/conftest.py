@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Generator
 
+import boto3
 import pytest
 from dotenv import load_dotenv
 
@@ -19,8 +20,9 @@ load_dotenv(Path(__file__).parents[1] / ".env")
 
 REPO_ROOT = Path(__file__).parents[1]
 DB_PATH = REPO_ROOT / "data" / "healthgpt.db"
-CHROMA_DIR = REPO_ROOT / "data" / "chroma_db"
 PDF_DIR = REPO_ROOT / "data" / "mmwr_pdfs"
+
+AWS_REGION = os.environ.get("AWS_REGION", "us-west-1")
 
 MORTALITY_TABLE = "cdc_wonder_mortality"
 
@@ -48,11 +50,12 @@ def db_path() -> Path:
 
 
 @pytest.fixture(scope="session")
-def chroma_dir() -> Path:
-    """Return the ChromaDB directory, skipping if it doesn't exist."""
-    if not CHROMA_DIR.exists() or not any(CHROMA_DIR.iterdir()):
-        pytest.skip(f"ChromaDB not found at {CHROMA_DIR} — run ingestion first")
-    return CHROMA_DIR
+def s3v_index():
+    """Return a boto3 s3vectors client, skipping if VECTOR_BUCKET is not set."""
+    vector_bucket = os.environ.get("VECTOR_BUCKET", "")
+    if not vector_bucket:
+        pytest.skip("VECTOR_BUCKET not set — skipping S3 Vectors tests")
+    return boto3.client("s3vectors", region_name=AWS_REGION)
 
 
 # ---------------------------------------------------------------------------
