@@ -24,10 +24,10 @@ class DataAPIClient:
 
     def __init__(
         self,
-        cluster_arn: str = None,
-        secret_arn: str = None,
-        database: str = None,
-        region: str = None,
+        cluster_arn: Optional[str] = None,
+        secret_arn: Optional[str] = None,
+        database: Optional[str] = None,
+        region: Optional[str] = None,
     ):
         self.cluster_arn = cluster_arn or os.environ.get("AURORA_CLUSTER_ARN")
         self.secret_arn = secret_arn or os.environ.get("AURORA_SECRET_ARN")
@@ -42,7 +42,7 @@ class DataAPIClient:
         self.region = region or os.environ.get("AWS_REGION", "us-west-1")
         self.client = boto3.client("rds-data", region_name=self.region)
 
-    def execute(self, sql: str, parameters: list[dict] = None) -> dict:
+    def execute(self, sql: str, parameters: Optional[list[dict]] = None) -> dict:
         """Execute a SQL statement. Returns raw Data API response."""
         try:
             kwargs = {
@@ -56,7 +56,7 @@ class DataAPIClient:
                 kwargs["parameters"] = parameters
             return self.client.execute_statement(**kwargs)
         except ClientError as exc:
-            logger.error("Aurora Data API error: %s", exc)
+            logger.error("Aurora Data API error on SQL %r: %s", sql, exc)
             raise
 
     def query(self, sql: str, params: dict = None) -> list[dict]:
@@ -120,6 +120,7 @@ class DataAPIClient:
             return val
         if "blobValue" in field:
             return field["blobValue"]
+        logger.warning("_extract_value: unrecognized field type in %r, returning None", field)
         return None
 
 
@@ -131,7 +132,12 @@ _client: Optional[DataAPIClient] = None
 
 
 def get_db() -> DataAPIClient:
-    """Return the shared DataAPIClient, creating it on first call."""
+    """Return the shared DataAPIClient, creating it on first call.
+
+    Thread-safety: FastAPI runs on a single asyncio event loop. The client
+    is initialized by check_aurora_db() in the lifespan handler before any
+    requests are served, so concurrent first-call races do not occur in practice.
+    """
     global _client
     if _client is None:
         _client = DataAPIClient()
