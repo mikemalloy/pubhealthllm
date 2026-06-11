@@ -1,7 +1,9 @@
 # terraform/6_backend/terraform.tfvars
 # Non-sensitive variable values for the Lambda backend.
-# Sensitive vars (aurora_secret_arn, clerk_jwks_url) must be passed via:
+# Sensitive vars (aurora_secret_arn) must be passed via:
 #   -var="aurora_secret_arn=..." or TF_VAR_aurora_secret_arn environment variable.
+
+clerk_jwks_url     = "https://clerk.chefmike.dev/.well-known/jwks.json"
 
 project_name       = "pubhealth"
 aws_region         = "us-west-1"
