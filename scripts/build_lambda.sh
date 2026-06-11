@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
 BUILD_DIR="$(mktemp -d)"
+trap 'rm -rf "$BUILD_DIR"' EXIT
 ZIP_NAME="pubhealth-backend.zip"
 ZIP_PATH="$REPO_ROOT/$ZIP_NAME"
 
@@ -19,7 +20,7 @@ echo "=== Build dir: $BUILD_DIR ==="
 
 # 1. Install lean dependencies targeting Lambda's Linux runtime
 echo "=== Installing lean dependencies ==="
-pip install \
+python3 -m pip install \
   --quiet \
   --target "$BUILD_DIR" \
   --platform manylinux2014_x86_64 \
