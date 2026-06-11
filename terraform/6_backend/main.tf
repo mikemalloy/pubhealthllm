@@ -77,10 +77,11 @@ data "aws_iam_policy_document" "api_permissions" {
       "bedrock:InvokeModel",
       "bedrock:InvokeModelWithResponseStream",
     ]
-    resources = [
-      "arn:aws:bedrock:${var.aws_region}::foundation-model/amazon.nova-pro-v1:0",
-      "arn:aws:bedrock:us-east-1:${data.aws_caller_identity.current.account_id}:inference-profile/us.amazon.nova-pro-v1:0",
-    ]
+    # us.amazon.nova-pro-v1:0 is a cross-region inference profile that routes across
+    # us-east-1, us-east-2, and us-west-2. Resource = "*" is necessary here —
+    # scoping to a single region ARN causes AccessDenied when the profile routes
+    # to a different region at runtime. Same pattern Alex's agent Lambdas use.
+    resources = ["*"]
   }
 
   # SageMaker — sentence embedding endpoint
@@ -151,8 +152,10 @@ resource "aws_lambda_function" "api" {
   timeout     = var.lambda_timeout_s
   architectures = ["x86_64"]
 
-  # Limit concurrency — Nova Pro is expensive; tune up if needed
-  reserved_concurrent_executions = 10
+  # No reserved_concurrent_executions — this account's total Lambda concurrency
+  # limit is 10, and AWS requires at least 10 unreserved. Reserving any amount
+  # would leave 0 unreserved and trigger InvalidParameterValueException. Draw
+  # from the shared pool; add a quota increase + cap if abuse becomes a concern.
 
   environment {
     variables = {
@@ -189,14 +192,9 @@ resource "aws_lambda_function" "api" {
 resource "aws_lambda_function_url" "api" {
   function_name      = aws_lambda_function.api.function_name
   authorization_type = "NONE"
-
-  cors {
-    allow_credentials = false
-    allow_headers     = ["Authorization", "Content-Type"]
-    allow_methods     = ["GET", "POST", "OPTIONS"]
-    allow_origins     = ["*"]
-    max_age           = 86400
-  }
+  # No CORS block — FastAPI's CORSMiddleware (server.py) handles CORS using the
+  # CORS_ORIGINS env var. Configuring CORS at both the Function URL and app layers
+  # creates conflicting headers. One layer, app-owned.
 }
 
 resource "aws_lambda_permission" "function_url" {
