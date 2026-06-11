@@ -6,6 +6,9 @@ to verify they return sensible output. No network calls are made —
 only local SQLite and ChromaDB are accessed.
 """
 
+import time
+from unittest.mock import MagicMock
+
 import pytest
 
 
@@ -377,3 +380,90 @@ def test_get_worst_counties_null_location_name(monkeypatch):
     result = tools_mod.get_worst_counties_by_measure("TX", "diabetes", top_n=1)
     assert isinstance(result, str)
     assert "Unknown" in result  # None → "Unknown" fallback
+
+
+# ---------------------------------------------------------------------------
+# check_aurora_db — DatabaseResumingException retry logic
+# ---------------------------------------------------------------------------
+
+
+def test_check_aurora_db_retries_on_resuming_then_succeeds(monkeypatch):
+    """check_aurora_db retries when Aurora raises DatabaseResumingException.
+
+    Aurora Serverless v2 raises DatabaseResumingException when the cluster
+    is resuming from auto-pause. check_aurora_db must retry rather than
+    propagating immediately.
+    """
+    from botocore.exceptions import ClientError
+
+    import pubhealth_llm.app.tools as tools_mod
+    from pubhealth_llm.app.tools import check_aurora_db
+
+    call_count = 0
+
+    def mock_query_one(sql, params):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise ClientError(
+                {"Error": {"Code": "DatabaseResumingException", "Message": "resuming"}},
+                "ExecuteStatement",
+            )
+        return {"ping": 1}
+
+    mock_db = MagicMock()
+    mock_db.query_one.side_effect = mock_query_one
+    monkeypatch.setattr(tools_mod, "get_db", lambda: mock_db)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    check_aurora_db()  # must not raise
+    assert call_count == 3
+
+
+def test_check_aurora_db_raises_after_max_retries(monkeypatch):
+    """check_aurora_db raises RuntimeError after exhausting all retries."""
+    from botocore.exceptions import ClientError
+
+    import pubhealth_llm.app.tools as tools_mod
+    from pubhealth_llm.app.tools import check_aurora_db
+
+    def always_resuming(sql, params):
+        raise ClientError(
+            {"Error": {"Code": "DatabaseResumingException", "Message": "resuming"}},
+            "ExecuteStatement",
+        )
+
+    mock_db = MagicMock()
+    mock_db.query_one.side_effect = always_resuming
+    monkeypatch.setattr(tools_mod, "get_db", lambda: mock_db)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    with pytest.raises(RuntimeError, match="Aurora"):
+        check_aurora_db()
+
+
+def test_check_aurora_db_non_resuming_clienterror_raises_immediately(monkeypatch):
+    """check_aurora_db does not retry on non-DatabaseResumingException ClientErrors."""
+    from botocore.exceptions import ClientError
+
+    import pubhealth_llm.app.tools as tools_mod
+    from pubhealth_llm.app.tools import check_aurora_db
+
+    call_count = 0
+
+    def bad_credentials(sql, params):
+        nonlocal call_count
+        call_count += 1
+        raise ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "denied"}},
+            "ExecuteStatement",
+        )
+
+    mock_db = MagicMock()
+    mock_db.query_one.side_effect = bad_credentials
+    monkeypatch.setattr(tools_mod, "get_db", lambda: mock_db)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    with pytest.raises(RuntimeError, match="Aurora"):
+        check_aurora_db()
+    assert call_count == 1  # no retry

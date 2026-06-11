@@ -26,9 +26,11 @@ LocationName contains bare county names without suffix (e.g. "Alameda", not "Ala
 import logging
 import os
 import re as _re
+import time
 from typing import Optional
 
 import boto3
+from botocore.exceptions import ClientError
 
 from pubhealth_llm.app.db import get_db
 from pubhealth_llm.app.embeddings import embed_text
@@ -42,6 +44,11 @@ MMWR_TOP_K = 5
 
 # Maximum rows returned by a single SQL query (prevents huge responses)
 SQL_MAX_ROWS = 20
+
+# Aurora Serverless v2 auto-resume retry settings
+# DatabaseResumingException is transient — cluster typically resumes in 15-30s.
+_AURORA_RESUME_RETRIES = 6
+_AURORA_RESUME_SLEEP_S = 5
 
 # S3 Vectors constants
 # Read at import time — intentional. Callers (conftest.py dotenv, Railway container env)
@@ -110,16 +117,38 @@ def check_aurora_db() -> None:
     Called from the FastAPI lifespan handler so the server fails at boot
     rather than on the first tool call.
 
+    Aurora Serverless v2 may be auto-paused on first Lambda invocation.
+    DatabaseResumingException is transient — retry with backoff until the
+    cluster resumes (typically 15-30 s) before raising.
+
     Raises:
         RuntimeError: If AURORA_CLUSTER_ARN/AURORA_SECRET_ARN are not set,
-                      or the Data API returns an error on SELECT 1.
+                      the cluster does not resume within the retry window,
+                      or the Data API returns a non-transient error.
     """
-    try:
-        result = get_db().query_one("SELECT 1 AS ping", {})
-    except ValueError as exc:
-        raise RuntimeError(f"Aurora configuration error: {exc}") from exc
-    except Exception as exc:
-        raise RuntimeError(f"Aurora connectivity check failed: {exc}") from exc
+    last_exc: Exception | None = None
+    for attempt in range(_AURORA_RESUME_RETRIES):
+        try:
+            result = get_db().query_one("SELECT 1 AS ping", {})
+            break  # success
+        except ValueError as exc:
+            raise RuntimeError(f"Aurora configuration error: {exc}") from exc
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "DatabaseResumingException":
+                logger.info(
+                    "Aurora resuming from auto-pause — retrying in %ds (attempt %d/%d)",
+                    _AURORA_RESUME_SLEEP_S, attempt + 1, _AURORA_RESUME_RETRIES,
+                )
+                last_exc = exc
+                time.sleep(_AURORA_RESUME_SLEEP_S)
+                continue
+            raise RuntimeError(f"Aurora connectivity check failed: {exc}") from exc
+        except Exception as exc:
+            raise RuntimeError(f"Aurora connectivity check failed: {exc}") from exc
+    else:
+        raise RuntimeError(
+            f"Aurora did not resume after {_AURORA_RESUME_RETRIES} retries: {last_exc}"
+        )
     if result is None:
         raise RuntimeError("Aurora ping returned None — cluster may be unavailable")
 

@@ -23,10 +23,13 @@ Stage 7 (cleanup + frontend cutover):
 - [x] Vercel production env var NEXT_PUBLIC_API_URL updated to Lambda Function URL
 - [x] Lambda CORS_ORIGINS updated: `pubhealth.vercel.app` → `pubhealth.chefmike.dev`
 - [x] CLAUDE.md updated: Lambda/Bedrock/Aurora/S3 Vectors (was Railway/Anthropic/SQLite/ChromaDB)
-- [ ] Vercel redeploy
-- [ ] Full-chain smoke test (CDC PLACES + MMWR question through live frontend)
+- [x] Vercel redeploy — live at https://pubhealth.chefmike.dev
+- [x] Full-chain smoke test: CDC PLACES (Travis obesity 30.4%, Aurora) + MMWR
+      (COVID vaccination, S3 Vectors, tool_search_mmwr_reports fired) both HTTP 200
+- [x] Lambda fixes: VECTOR_BUCKET/INDEX_NAME/SAGEMAKER_ENDPOINT env vars corrected;
+      Aurora retry logic (DatabaseResumingException) added to check_aurora_db (TDD, 3 tests)
 
-**You are here →** Stage 7 partially complete. Next: Vercel redeploy, then smoke test.
+**You are here →** Stage 7 COMPLETE. Backend on Lambda, frontend on Vercel, both smoke-tested.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE

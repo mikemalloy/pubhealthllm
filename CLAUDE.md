@@ -57,7 +57,7 @@ backend/
 
 - `PublicHealthResponse` schema is the JSON API contract. Return it as-is from `/ask`.
 - LLM: `bedrock:us.amazon.nova-pro-v1:0` (cross-region inference profile). No Anthropic/Groq.
-- Vector store: S3 Vectors (`pubhealth-vectors` bucket, `mmwr-embeddings` index). No ChromaDB.
+- Vector store: S3 Vectors (`pubhealth-vectors-724533161045` bucket, `mmwr-reports` index). No ChromaDB.
 - Relational data: Aurora Serverless v2 via Data API. No SQLite.
 - Clerk auth from day one: `Depends(clerk_guard)` on `/ask` + `/measures`; `/health` public.
 - CORS locked to known origins — not `*`.
