@@ -122,6 +122,21 @@ async def clerk_guard(request: Request) -> Any:
     Override in tests:
         app.dependency_overrides[clerk_guard] = lambda: {"sub": "test-user"}
     """
+    import jwt as _pyjwt
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        _token = auth_header[7:]
+        try:
+            _hdr = _pyjwt.get_unverified_header(_token)
+            _pay = _pyjwt.decode(_token, options={"verify_signature": False})
+            logger.info(
+                "clerk_guard: token kid=%s iss=%s exp=%s sub=%s",
+                _hdr.get("kid"), _pay.get("iss"), _pay.get("exp"), _pay.get("sub", "?")[:8],
+            )
+        except Exception as _e:
+            logger.warning("clerk_guard: could not decode token header: %s", _e)
+    else:
+        logger.warning("clerk_guard: no Bearer token in Authorization header")
     return await _get_clerk_bearer()(request)
 
 

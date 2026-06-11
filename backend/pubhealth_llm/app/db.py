@@ -11,6 +11,7 @@ Modeled on Alex's DataAPIClient pattern. Differences from Alex's version:
 import json
 import logging
 import os
+import time
 from typing import Any, Optional
 
 import boto3
@@ -42,22 +43,46 @@ class DataAPIClient:
         self.region = region or os.environ.get("AWS_REGION", "us-west-1")
         self.client = boto3.client("rds-data", region_name=self.region)
 
+    # Aurora Serverless v2 auto-resume retry settings.
+    # DatabaseResumingException is transient — cluster resumes in 15-30s.
+    _RESUME_RETRIES = 6
+    _RESUME_SLEEP_S = 5
+
     def execute(self, sql: str, parameters: Optional[list[dict]] = None) -> dict:
-        """Execute a SQL statement. Returns raw Data API response."""
-        try:
-            kwargs = {
-                "resourceArn": self.cluster_arn,
-                "secretArn": self.secret_arn,
-                "database": self.database,
-                "sql": sql,
-                "includeResultMetadata": True,
-            }
-            if parameters:
-                kwargs["parameters"] = parameters
-            return self.client.execute_statement(**kwargs)
-        except ClientError as exc:
-            logger.error("Aurora Data API error on SQL %r: %s", sql, exc)
-            raise
+        """Execute a SQL statement. Returns raw Data API response.
+
+        Retries on DatabaseResumingException so that all callers automatically
+        tolerate Aurora Serverless v2 auto-pause without special-casing.
+        """
+        kwargs = {
+            "resourceArn": self.cluster_arn,
+            "secretArn": self.secret_arn,
+            "database": self.database,
+            "sql": sql,
+            "includeResultMetadata": True,
+        }
+        if parameters:
+            kwargs["parameters"] = parameters
+
+        for attempt in range(self._RESUME_RETRIES):
+            try:
+                return self.client.execute_statement(**kwargs)
+            except ClientError as exc:
+                if exc.response["Error"]["Code"] == "DatabaseResumingException":
+                    logger.info(
+                        "Aurora resuming from auto-pause — retrying in %ds (attempt %d/%d) sql=%r",
+                        self._RESUME_SLEEP_S, attempt + 1, self._RESUME_RETRIES, sql[:60],
+                    )
+                    time.sleep(self._RESUME_SLEEP_S)
+                    continue
+                logger.error("Aurora Data API error on SQL %r: %s", sql, exc)
+                raise
+        # Exhausted retries
+        logger.error("Aurora did not resume after %d retries for SQL %r", self._RESUME_RETRIES, sql[:60])
+        raise ClientError(
+            {"Error": {"Code": "DatabaseResumingException", "Message": f"Aurora did not resume after {self._RESUME_RETRIES} retries"}},
+            "ExecuteStatement",
+        )
 
     def query(self, sql: str, params: dict = None) -> list[dict]:
         """Execute SELECT and return list of row dicts."""

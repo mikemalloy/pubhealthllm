@@ -4,6 +4,9 @@ Aurora-backed tool tests.
 All tests guard on the `aurora_db` fixture (skips when AURORA_CLUSTER_ARN unset).
 The fixture is defined in conftest.py and warms the cluster with SELECT 1.
 """
+import time
+from unittest.mock import MagicMock
+
 import pytest
 
 
@@ -287,3 +290,103 @@ def test_compare_mortality_states(aurora_db):
     assert isinstance(result, str)
     assert "Heart" in result or "heart" in result
     assert "Louisiana" in result or "Texas" in result
+
+
+# ---------------------------------------------------------------------------
+# DataAPIClient.execute — DatabaseResumingException retry logic
+# ---------------------------------------------------------------------------
+
+
+def test_execute_retries_on_resuming_then_succeeds(monkeypatch):
+    """DataAPIClient.execute retries on DatabaseResumingException.
+
+    Aurora Serverless v2 raises this when the cluster is auto-paused and needs
+    time to resume. The execute() method must retry rather than propagating.
+    """
+    from botocore.exceptions import ClientError
+    from pubhealth_llm.app.db import DataAPIClient
+
+    client = DataAPIClient.__new__(DataAPIClient)
+    client.cluster_arn = "arn:aws:rds:us-west-1:123:cluster:test"
+    client.secret_arn = "arn:aws:secretsmanager:us-west-1:123:secret:test"
+    client.database = "pubhealth"
+    client.region = "us-west-1"
+
+    call_count = 0
+    success_response = {
+        "records": [[{"longValue": 1}]],
+        "columnMetadata": [{"name": "n"}],
+    }
+
+    def mock_execute_statement(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise ClientError(
+                {"Error": {"Code": "DatabaseResumingException", "Message": "resuming"}},
+                "ExecuteStatement",
+            )
+        return success_response
+
+    mock_rds = MagicMock()
+    mock_rds.execute_statement.side_effect = mock_execute_statement
+    client.client = mock_rds
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    result = client.execute("SELECT 1 AS n")
+    assert result == success_response
+    assert call_count == 3
+
+
+def test_execute_raises_after_max_retries(monkeypatch):
+    """DataAPIClient.execute raises ClientError after exhausting all retries."""
+    from botocore.exceptions import ClientError
+    from pubhealth_llm.app.db import DataAPIClient
+
+    client = DataAPIClient.__new__(DataAPIClient)
+    client.cluster_arn = "arn:aws:rds:us-west-1:123:cluster:test"
+    client.secret_arn = "arn:aws:secretsmanager:us-west-1:123:secret:test"
+    client.database = "pubhealth"
+    client.region = "us-west-1"
+
+    mock_rds = MagicMock()
+    mock_rds.execute_statement.side_effect = ClientError(
+        {"Error": {"Code": "DatabaseResumingException", "Message": "resuming"}},
+        "ExecuteStatement",
+    )
+    client.client = mock_rds
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    with pytest.raises(ClientError):
+        client.execute("SELECT 1 AS n")
+
+
+def test_execute_no_retry_on_other_clienterror(monkeypatch):
+    """DataAPIClient.execute does not retry on non-DatabaseResumingException errors."""
+    from botocore.exceptions import ClientError
+    from pubhealth_llm.app.db import DataAPIClient
+
+    client = DataAPIClient.__new__(DataAPIClient)
+    client.cluster_arn = "arn:aws:rds:us-west-1:123:cluster:test"
+    client.secret_arn = "arn:aws:secretsmanager:us-west-1:123:secret:test"
+    client.database = "pubhealth"
+    client.region = "us-west-1"
+
+    call_count = 0
+    mock_rds = MagicMock()
+
+    def mock_execute_statement(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        raise ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "denied"}},
+            "ExecuteStatement",
+        )
+
+    mock_rds.execute_statement.side_effect = mock_execute_statement
+    client.client = mock_rds
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    with pytest.raises(ClientError):
+        client.execute("SELECT 1 AS n")
+    assert call_count == 1  # no retry
