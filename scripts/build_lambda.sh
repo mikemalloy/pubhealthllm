@@ -49,10 +49,12 @@ fi
 # 4. Build ZIP
 echo "=== Building ZIP ==="
 rm -f "$ZIP_PATH"
+# NOTE: do NOT exclude *.dist-info/* — opentelemetry (a pydantic-ai dep) uses
+# entry_points() at import time to discover its context implementation. Stripping
+# dist-info removes those registrations and causes StopIteration on Lambda init.
 (cd "$BUILD_DIR" && zip -r9q "$ZIP_PATH" . \
   --exclude "*.pyc" \
   --exclude "*/__pycache__/*" \
-  --exclude "*.dist-info/*" \
   --exclude "*.egg-info/*")
 
 ZIP_MB=$(du -sm "$ZIP_PATH" | cut -f1)

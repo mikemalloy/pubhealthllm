@@ -97,8 +97,9 @@ data "aws_iam_policy_document" "api_permissions" {
   statement {
     sid     = "S3VectorsAccess"
     actions = [
-      "s3vectors:QueryVectors",
-      "s3vectors:GetVectors",
+      "s3vectors:QueryVectors",    # runtime: MMWR similarity search
+      "s3vectors:GetVectors",      # runtime: retrieve specific vectors
+      "s3vectors:ListVectors",     # startup: check_vector_store() health check
       "s3vectors:DescribeVectorBucket",
     ]
     resources = [
@@ -160,7 +161,7 @@ resource "aws_lambda_function" "api" {
   environment {
     variables = {
       PUBHEALTH_MODEL    = "bedrock:us.amazon.nova-pro-v1:0"
-      AWS_REGION         = var.aws_region
+      # AWS_REGION is a Lambda reserved variable — set automatically to deployment region
       BEDROCK_REGION     = var.aws_region
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
       VECTOR_BUCKET      = var.vector_bucket
