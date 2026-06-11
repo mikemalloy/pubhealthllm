@@ -17,8 +17,8 @@ Mangum adapter in `lambda_handler.py` (wraps FastAPI app); created
 chromadb/sentence-transformers/torch/ingestion tools). Four new tests
 confirm handler is Mangum instance, wraps the app, and routes exist.
 
-**You are here →** Task 1 complete.
-Next: Task 2 — add Bedrock provider branch to agent builder (or revisit Task 3 if already done).
+**You are here →** Task 3 (Terraform variables + outputs) complete.
+Next: Task 4 (Terraform main.tf for Lambda + IAM roles).
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -262,6 +262,15 @@ icons). Keep the inset shell + panel styling.
 ---
 
 ## Session log (newest first)
+
+- 2026-06-10 — T3 (Terraform variables + outputs) complete. Created terraform/6_backend/
+  directory. Added variables.tf: 11 variables (project_name, aws_region,
+  sagemaker_endpoint, vector_bucket, index_name, aurora_cluster_arn, aurora_secret_arn,
+  aurora_database, clerk_jwks_url, cors_origins, lambda_memory_mb, lambda_timeout_s)
+  with defaults, descriptions, and type annotations. Added outputs.tf: 3 outputs
+  (function_url, lambda_arn, artifact_bucket) — references aws_lambda_function_url.api,
+  aws_lambda_function.api, aws_s3_bucket.lambda_artifacts (will be defined in main.tf).
+  HCL syntax valid. Committed f3c97a1.
 
 - 2026-06-10 — T1 (Lambda handler) complete. TDD: 4 tests in
   test_lambda_handler.py (handler is Mangum, wraps app, routes exist).
