@@ -11,13 +11,14 @@ Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` block
 
 ## Current decision (why we're here)
 
-AWS port work: Task 2 (add Bedrock branch) complete. Added `bedrock` provider
-support to `_build_agent()` via `BedrockConverseModel` + `BedrockProvider` (IAM auth,
-no API key). Two new tests added to `test_agent_creation.py` (will ERROR until the
-`bedrock_available` fixture is added in Task 4). Module docstring updated.
+AWS port work: Task 1 (Lambda handler + lean requirements) complete. Added
+Mangum adapter in `lambda_handler.py` (wraps FastAPI app); created
+`requirements-lambda.txt` with lean deps (excludes boto3/botocore/uvicorn/
+chromadb/sentence-transformers/torch/ingestion tools). Four new tests
+confirm handler is Mangum instance, wraps the app, and routes exist.
 
-**You are here →** Task 2 complete.
-Next: Task 3 — update tools + orchestrator for Aurora Data API + S3 Vectors.
+**You are here →** Task 1 complete.
+Next: Task 2 — add Bedrock provider branch to agent builder (or revisit Task 3 if already done).
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -261,6 +262,15 @@ icons). Keep the inset shell + panel styling.
 ---
 
 ## Session log (newest first)
+
+- 2026-06-10 — T1 (Lambda handler) complete. TDD: 4 tests in
+  test_lambda_handler.py (handler is Mangum, wraps app, routes exist).
+  Created lambda_handler.py (Mangum(app, lifespan="auto") entry point) +
+  requirements-lambda.txt (lean: fastapi, mangum, fastapi-clerk-auth,
+  pydantic-ai, pydantic, PyJWT, python-dotenv, requests — excludes
+  boto3/botocore/uvicorn/chromadb/sentence-transformers/torch/ingestion
+  tools). `uv add mangum` installs mangum==0.21.0. All 654 tests pass.
+  Commit 2e3848d.
 
 - 2026-06-10 — T2 (Bedrock branch) complete. Added Bedrock Nova Pro support
   to `_build_agent()`: BedrockConverseModel + BedrockProvider(region) imports +
