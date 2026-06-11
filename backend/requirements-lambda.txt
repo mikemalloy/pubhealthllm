@@ -1,0 +1,14 @@
+# Lambda runtime dependencies
+# boto3/botocore excluded — Lambda python3.12 runtime provides them
+# uvicorn excluded — Mangum replaces it for Lambda
+# chromadb/sentence-transformers/torch excluded — not used at runtime (Stage 5 migrated to S3 Vectors)
+# PyPDF2/beautifulsoup4/pandas/sqlalchemy/tqdm excluded — ingestion tools only
+
+fastapi>=0.115.0
+mangum>=0.19.0
+fastapi-clerk-auth
+pydantic-ai>=1.105.0
+pydantic>=2.12.5
+PyJWT<2.13.0
+python-dotenv==1.2.2
+requests==2.32.4
