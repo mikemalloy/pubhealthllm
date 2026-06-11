@@ -79,7 +79,7 @@ data "aws_iam_policy_document" "api_permissions" {
     ]
     resources = [
       "arn:aws:bedrock:${var.aws_region}::foundation-model/amazon.nova-pro-v1:0",
-      "arn:aws:bedrock:us-west-1::foundation-model/us.amazon.nova-pro-v1:0",
+      "arn:aws:bedrock:us-east-1:${data.aws_caller_identity.current.account_id}:inference-profile/us.amazon.nova-pro-v1:0",
     ]
   }
 
@@ -95,7 +95,11 @@ data "aws_iam_policy_document" "api_permissions" {
   # S3 Vectors — MMWR vector index queries
   statement {
     sid     = "S3VectorsAccess"
-    actions = ["s3vectors:*"]
+    actions = [
+      "s3vectors:QueryVectors",
+      "s3vectors:GetVectors",
+      "s3vectors:DescribeVectorBucket",
+    ]
     resources = [
       "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${var.vector_bucket}",
       "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${var.vector_bucket}/index/${var.index_name}",
@@ -187,7 +191,7 @@ resource "aws_lambda_function_url" "api" {
   authorization_type = "NONE"
 
   cors {
-    allow_credentials = true
+    allow_credentials = false
     allow_headers     = ["Authorization", "Content-Type"]
     allow_methods     = ["GET", "POST", "OPTIONS"]
     allow_origins     = ["*"]
