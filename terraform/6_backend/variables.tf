@@ -37,6 +37,7 @@ variable "aurora_cluster_arn" {
 variable "aurora_secret_arn" {
   description = "Secrets Manager ARN for Aurora credentials (from Stage 5 terraform output)"
   type        = string
+  sensitive   = true
 }
 
 variable "aurora_database" {
@@ -48,6 +49,7 @@ variable "aurora_database" {
 variable "clerk_jwks_url" {
   description = "Clerk JWKS URL for JWT verification (from Clerk dashboard)"
   type        = string
+  sensitive   = true
 }
 
 variable "cors_origins" {
