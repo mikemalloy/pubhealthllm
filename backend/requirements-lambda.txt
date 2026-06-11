@@ -7,7 +7,11 @@
 fastapi>=0.115.0
 mangum>=0.21.0
 fastapi-clerk-auth
-pydantic-ai>=1.105.0
+# pydantic-ai meta-package installs all extras (including openai/tiktoken) which has no
+# manylinux wheel for Python 3.12. Use pydantic-ai-slim with only the needed extras:
+# [bedrock] for Nova Pro inference, [anthropic] because agent.py imports AnthropicModel
+# at module level (needed even though Bedrock is the default provider).
+pydantic-ai-slim[bedrock,anthropic]>=1.105.0
 pydantic>=2.12.5
 PyJWT<2.13.0
 python-dotenv==1.2.2
