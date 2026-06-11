@@ -23,15 +23,18 @@
    next-themes / pnpm / lucide-react / Clerk. UI placeholders only — do NOT wire
    pubHealth data/endpoints into the UI yet.
 
-4. **Backend is DONE and deployed** (Railway, `/health` + `/ask` + `/measures`,
+4. **Backend is DONE and deployed** (AWS Lambda + Function URL, `/health` + `/ask` + `/measures`,
    Clerk-guarded). Do NOT change backend behavior during the frontend phase.
+   - Function URL: `https://4tgkp3yp35krou263q3m5a5xpu0dtqrt.lambda-url.us-west-1.on.aws`
+   - CORS_ORIGINS: `https://pubhealth.chefmike.dev`
+   - Terraform: `terraform/6_backend/` (old App Runner root files archived to `terraform/archive/`)
 
 ## Project context
 
 - Engine lifted from `pubHealthLLM_v1` (read-only at `/Volumes/Hub/dev/rag/pubHealthLLM_v1`).
 - Gradio and HuggingFace Spaces target dropped. Replaced by FastAPI.
 - Structural template: Drug Discovery at `/Volumes/Hub/dev/Drug Discovery` (read-only).
-- Deploy target: Railway (backend), Vercel (frontend). Terraform = AWS fallback only.
+- Deploy target: AWS Lambda (backend, us-west-1), Vercel (frontend, pubhealth.chefmike.dev).
 
 ## Backend layout
 
@@ -43,7 +46,7 @@ backend/
 │   │   ├── agent.py       # PydanticAI agent + run_agent()
 │   │   ├── tools.py       # 8 tools (CDC PLACES, MMWR, mortality)
 │   │   └── schemas.py     # PublicHealthResponse — this IS the API contract
-│   ├── data_ingestion/    # CDC PLACES → SQLite, MMWR → ChromaDB
+│   ├── data_ingestion/    # CDC PLACES → Aurora Serverless v2, MMWR → S3 Vectors
 │   └── decision_tree/     # Health economic Monte Carlo (phase 2)
 ├── data/                  # Baked into Docker image; tracked via Git LFS
 ├── tests/
@@ -53,11 +56,13 @@ backend/
 ## Key decisions (from ARCHITECTURE.md)
 
 - `PublicHealthResponse` schema is the JSON API contract. Return it as-is from `/ask`.
-- Simplify model registry to Claude only (+ one fallback). Drop Groq condensed-prompt hack.
+- LLM: `bedrock:us.amazon.nova-pro-v1:0` (cross-region inference profile). No Anthropic/Groq.
+- Vector store: S3 Vectors (`pubhealth-vectors` bucket, `mmwr-embeddings` index). No ChromaDB.
+- Relational data: Aurora Serverless v2 via Data API. No SQLite.
 - Clerk auth from day one: `Depends(clerk_guard)` on `/ask` + `/measures`; `/health` public.
 - CORS locked to known origins — not `*`.
 - Rate limit `/ask` — it calls a paid LLM with 8 tools.
-- Data is baked into the Docker image (not downloaded at runtime).
+- Data lives in AWS (Aurora + S3 Vectors) — no baked-in data files or Docker image.
 
 ## Known concerns (address before building /ask)
 

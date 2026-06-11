@@ -11,14 +11,22 @@ Status keys: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` block
 
 ## Current decision (why we're here)
 
-AWS port work: Task 1 (Lambda handler + lean requirements) complete. Added
-Mangum adapter in `lambda_handler.py` (wraps FastAPI app); created
-`requirements-lambda.txt` with lean deps (excludes boto3/botocore/uvicorn/
-chromadb/sentence-transformers/torch/ingestion tools). Four new tests
-confirm handler is Mangum instance, wraps the app, and routes exist.
+Stage 6b (Lambda deploy) is **complete**. Backend is live on AWS Lambda:
+- Function URL: `https://4tgkp3yp35krou263q3m5a5xpu0dtqrt.lambda-url.us-west-1.on.aws`
+- Smoke tested: GET /health 200, POST /ask (Travis obesity) 200 — Aurora path confirmed
+- Terraform: `terraform/6_backend/` — App Runner root files archived to `terraform/archive/`
 
-**You are here →** Task 3 (Terraform variables + outputs) complete.
-Next: Task 4 (Terraform main.tf for Lambda + IAM roles).
+Stage 7 (cleanup + frontend cutover):
+- [x] App Runner terraform state confirmed empty
+- [x] Old terraform root files archived to `terraform/archive/`
+- [x] `frontend/.env.local` NEXT_PUBLIC_API_URL → Lambda Function URL
+- [x] Vercel production env var NEXT_PUBLIC_API_URL updated to Lambda Function URL
+- [x] Lambda CORS_ORIGINS updated: `pubhealth.vercel.app` → `pubhealth.chefmike.dev`
+- [x] CLAUDE.md updated: Lambda/Bedrock/Aurora/S3 Vectors (was Railway/Anthropic/SQLite/ChromaDB)
+- [ ] Vercel redeploy
+- [ ] Full-chain smoke test (CDC PLACES + MMWR question through live frontend)
+
+**You are here →** Stage 7 partially complete. Next: Vercel redeploy, then smoke test.
 
 ⚠️ **Open perf finding (P1):** live `/ask` took ~29s in prod. Diagnose cold-start
 vs agentic-loop (two consecutive calls); if it's the loop, address with SSE
@@ -106,7 +114,9 @@ Order: 1–3 make it work; 4–6 make it safe. TDD throughout. This is the defer
       against the Railway URL.
 - [x] **D4. Anthropic spend cap set.** Confirmed by Mike before sharing the URL.
 
-**Backend complete.** Live at https://pubhealthllm-production.up.railway.app
+**Backend complete.** ~~Railway (retired)~~ → **AWS Lambda** Function URL:
+`https://4tgkp3yp35krou263q3m5a5xpu0dtqrt.lambda-url.us-west-1.on.aws`
+Terraform: `terraform/6_backend/`. Model: Bedrock Nova Pro. Data: Aurora + S3 Vectors.
 
 ---
 
