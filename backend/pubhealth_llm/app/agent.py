@@ -23,7 +23,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -401,10 +401,29 @@ def _log_query(question: str, response_summary: str) -> None:
 
 
 @dataclass
+class ToolEvent:
+    """One tool call + return, captured during an eval run."""
+    name: str
+    args: dict
+    content: str
+
+
+@dataclass
+class EvalTrace:
+    """Tool-call telemetry captured when _capture_trace=True. Not populated in production."""
+    tool_events: list[ToolEvent]
+
+    @property
+    def tool_names(self) -> list[str]:
+        return [e.name for e in self.tool_events]
+
+
+@dataclass
 class AgentResult:
     """Result returned by run_agent, bundling the structured response and tool telemetry."""
     response: PublicHealthResponse
     tools_used: list[str]
+    trace: Optional[EvalTrace] = None
 
 
 def _extract_tools_used(result) -> list[str]:
@@ -433,6 +452,46 @@ def _extract_tools_used(result) -> list[str]:
     return tools
 
 
+def _extract_trace(result) -> EvalTrace:
+    """Extract full tool call+return telemetry from a PydanticAI AgentRunResult.
+
+    Pairs ToolCallPart (args) with subsequent ToolReturnPart (content) by tool_call_id.
+    Falls back to positional pairing if tool_call_id is absent.
+    """
+    output_tool_name = result._output_tool_name
+
+    calls: dict[str, tuple[str, dict]] = {}
+    call_order: list[str] = []
+    call_idx = 0
+
+    for msg in result.new_messages():
+        if isinstance(msg, ModelResponse):
+            for part in msg.parts:
+                if isinstance(part, ToolCallPart) and part.tool_name != output_tool_name:
+                    key = part.tool_call_id or f"__pos_{call_idx}__"
+                    args = part.args if isinstance(part.args, dict) else {}
+                    calls[key] = (part.tool_name, args)
+                    call_order.append(key)
+                    call_idx += 1
+
+    returns: dict[str, str] = {}
+    return_idx = 0
+    for msg in result.new_messages():
+        for part in getattr(msg, "parts", []):
+            if isinstance(part, ToolReturnPart):
+                key = getattr(part, "tool_call_id", None) or f"__pos_{return_idx}__"
+                returns[key] = str(part.content)
+                return_idx += 1
+
+    events: list[ToolEvent] = []
+    for key in call_order:
+        name, args = calls[key]
+        content = returns.get(key, "")
+        events.append(ToolEvent(name=name, args=args, content=content))
+
+    return EvalTrace(tool_events=events)
+
+
 # ---------------------------------------------------------------------------
 # Public interface
 # ---------------------------------------------------------------------------
@@ -442,6 +501,7 @@ async def run_agent(
     question: str,
     message_history: Optional[list] = None,
     model: Optional[str] = None,
+    _capture_trace: bool = False,
 ) -> AgentResult:
     """
     Run the pubHealthLLM agent on a user question.
@@ -479,8 +539,9 @@ async def run_agent(
         )
         response: PublicHealthResponse = result.output
         tools_used = _extract_tools_used(result)
+        trace = _extract_trace(result) if _capture_trace else None
         _log_query(question, response.summary[:200])
-        return AgentResult(response=response, tools_used=tools_used)
+        return AgentResult(response=response, tools_used=tools_used, trace=trace)
 
     except Exception as exc:
         logger.error("Agent run failed: %s", exc, exc_info=True)
@@ -499,4 +560,5 @@ async def run_agent(
                 sources=["No data retrieved due to error."],
             ),
             tools_used=[],
+            trace=None,
         )

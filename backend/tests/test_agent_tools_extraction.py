@@ -57,3 +57,27 @@ def test_extract_tools_used_empty_when_no_tool_calls():
 
     result = _extract_tools_used(FakeResult())
     assert result == []
+
+
+def test_capture_trace_false_returns_none_trace():
+    """Default run_agent(_capture_trace=False) → AgentResult.trace is None."""
+    from pubhealth_llm.app.agent import AgentResult
+    from pubhealth_llm.app.schemas import PublicHealthResponse
+    result = AgentResult(
+        response=PublicHealthResponse(
+            summary="s", evidence=[], sources=[], caveats=[]
+        ),
+        tools_used=["tool_get_health_statistics"],
+        trace=None,
+    )
+    assert result.trace is None
+
+
+def test_eval_trace_tool_names():
+    """EvalTrace.tool_names property returns tool names in order."""
+    from pubhealth_llm.app.agent import EvalTrace, ToolEvent
+    trace = EvalTrace(tool_events=[
+        ToolEvent(name="tool_get_health_statistics", args={"location": "Travis County, TX"}, content="Data..."),
+        ToolEvent(name="tool_search_mmwr_reports", args={"query": "diabetes"}, content="Results..."),
+    ])
+    assert trace.tool_names == ["tool_get_health_statistics", "tool_search_mmwr_reports"]
