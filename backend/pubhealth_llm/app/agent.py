@@ -16,6 +16,7 @@ Usage:
 """
 
 import datetime
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -469,7 +470,13 @@ def _extract_trace(result) -> EvalTrace:
             for part in msg.parts:
                 if isinstance(part, ToolCallPart) and part.tool_name != output_tool_name:
                     key = part.tool_call_id or f"__pos_{call_idx}__"
-                    args = part.args if isinstance(part.args, dict) else {}
+                    if isinstance(part.args, dict):
+                        args = part.args
+                    else:
+                        try:
+                            args = json.loads(part.args)
+                        except (json.JSONDecodeError, TypeError):
+                            args = {"_raw": str(part.args)}
                     calls[key] = (part.tool_name, args)
                     call_order.append(key)
                     call_idx += 1
