@@ -1,7 +1,7 @@
 # backend/pubhealth_llm/evals/schemas.py
 """Pydantic schemas for the pubHealthLLM eval harness."""
 
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
@@ -36,8 +36,8 @@ class GoldItem(BaseModel):
 class ToolEvent(BaseModel):
     """One tool call + return captured during an eval run."""
     name: str
-    args: dict
-    content: str  # return value (string)
+    args: dict[str, Any]
+    content: str
 
 
 class ItemResult(BaseModel):

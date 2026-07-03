@@ -1,5 +1,5 @@
 # backend/pubhealth_llm/evals/gold_set.yaml
-# 25-item labeled evaluation set for pubHealthLLM.
+# 27-item labeled evaluation set for pubHealthLLM.
 # Data sources: cdc_places (CDC PLACES 2023), mmwr (S3 Vectors, 9 PDFs),
 #               mortality (NCHS 2017), none (out-of-domain / abstain).
 # Values confirmed from live Aurora + S3 Vectors queries (2026-07-03).
