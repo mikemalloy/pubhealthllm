@@ -2,7 +2,6 @@
 """Pure metric functions for the pubHealthLLM eval harness."""
 
 import re
-from typing import Optional
 
 from pubhealth_llm.app.schemas import PublicHealthResponse
 
