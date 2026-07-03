@@ -1,0 +1,344 @@
+# backend/pubhealth_llm/evals/gold_set.yaml
+# 25-item labeled evaluation set for pubHealthLLM.
+# Data sources: cdc_places (CDC PLACES 2023), mmwr (S3 Vectors, 9 PDFs),
+#               mortality (NCHS 2017), none (out-of-domain / abstain).
+# Values confirmed from live Aurora + S3 Vectors queries (2026-07-03).
+
+items:
+
+  # -----------------------------------------------------------------------
+  # CDC PLACES — numeric retrieval (10 items)
+  # -----------------------------------------------------------------------
+
+  - id: places_001
+    question: "What is the diabetes prevalence in Travis County, TX?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_health_statistics]
+    expected_facts:
+      - metric: "Diabetes"
+        location: "Travis County, TX"
+        expected_value: 9.0
+        tolerance: 0.5
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should report crude diabetes prevalence ~9.0% for Travis County TX with CI 7.8–10.2. No invented values."
+
+  - id: places_002
+    question: "What is the obesity rate in Travis County, TX?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_health_statistics]
+    expected_facts:
+      - metric: "Obesity"
+        location: "Travis County, TX"
+        expected_value: 30.4
+        tolerance: 0.5
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should report crude obesity ~30.4% for Travis County TX with CI 26.7–34.3."
+
+  - id: places_003
+    question: "What is the obesity rate in Cook County, IL?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_health_statistics]
+    expected_facts:
+      - metric: "Obesity"
+        location: "Cook County, IL"
+        expected_value: 31.0
+        tolerance: 0.5
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should report crude obesity ~31.0% for Cook County IL."
+
+  - id: places_004
+    question: "What is the current smoking prevalence in Harris County, TX?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_health_statistics]
+    expected_facts:
+      - metric: "Current Smoking"
+        location: "Harris County, TX"
+        expected_value: 12.7
+        tolerance: 0.5
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should report smoking ~12.7% for Harris County TX."
+
+  - id: places_005
+    question: "Which counties in Texas have the highest diabetes rates?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_worst_counties_by_measure]
+    expected_facts:
+      - metric: "Diabetes"
+        location: "Dimmit, TX"
+        expected_value: 23.4
+        tolerance: 1.0
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Top county should be Dimmit (~23.4%), Jim Hogg (~22.8%), Zavala (~22.6%). Response should contain a ranked table."
+
+  - id: places_006
+    question: "Which counties in Texas have the highest smoking rates?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_worst_counties_by_measure]
+    expected_facts:
+      - metric: "Current Smoking"
+        location: "San Augustine, TX"
+        expected_value: 22.9
+        tolerance: 1.0
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Top county should be San Augustine (~22.9%). Response should be a ranked table."
+
+  - id: places_007
+    question: "Compare obesity rates between Travis County, TX and Harris County, TX."
+    data_sources: [cdc_places]
+    expected_tools: [tool_compare_locations]
+    expected_facts:
+      - metric: "Obesity"
+        location: "Travis County, TX"
+        expected_value: 30.4
+        tolerance: 0.5
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should compare both counties. Travis ~30.4%, Harris value should also appear. No fabricated comparison."
+
+  - id: places_008
+    question: "What is the diabetes rate in Travis County with confidence intervals?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_health_statistics]
+    expected_facts:
+      - metric: "Diabetes"
+        location: "Travis County, TX"
+        expected_value: 9.0
+        tolerance: 0.5
+        unit: "% of adults"
+        year: 2023
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should include 95% CI (7.8–10.2). Response should explicitly mention CI bounds."
+
+  - id: places_009
+    question: "Which Texas counties have the highest combined burden of diabetes and obesity?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_rank_counties_composite]
+    expected_facts: []
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should call composite ranking tool. Output should include 'Composite' score column. No single-measure tool substitution."
+
+  - id: places_010
+    question: "What health measures does CDC PLACES track?"
+    data_sources: [cdc_places]
+    expected_tools: [tool_get_available_measures]
+    expected_facts: []
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should list available measures grouped by category. No fabrication — all from the measures table."
+
+  # -----------------------------------------------------------------------
+  # MMWR — vector retrieval (7 items)
+  # -----------------------------------------------------------------------
+
+  - id: mmwr_001
+    question: "What does the CDC MMWR report about topical antifungal prescribing patterns in Medicare?"
+    data_sources: [mmwr]
+    expected_tools: [tool_search_mmwr_reports]
+    expected_facts: []
+    expected_source_ids: [mm7301a1-H.pdf]
+    is_answerable: true
+    rubric: "Must retrieve from mm7301a1-H.pdf (ketoconazole/nystatin Medicare prescribing). Summary should mention antifungal prescriptions."
+
+  - id: mmwr_002
+    question: "What were the CDC findings on influenza vaccine effectiveness in the 2021-22 season?"
+    data_sources: [mmwr]
+    expected_tools: [tool_search_mmwr_reports]
+    expected_facts: []
+    expected_source_ids: [mm7110a1-H.pdf]
+    is_answerable: true
+    rubric: "Must retrieve from mm7110a1-H.pdf. Summary should mention flu vaccine effectiveness."
+
+  - id: mmwr_003
+    question: "What does the CDC report say about HIV prevention services for transgender women?"
+    data_sources: [mmwr]
+    expected_tools: [tool_search_mmwr_reports]
+    expected_facts: []
+    expected_source_ids: [mm7120a1-H.pdf]
+    is_answerable: true
+    rubric: "Must retrieve from mm7120a1-H.pdf. Should mention PrEP, HIV testing, transgender women."
+
+  - id: mmwr_004
+    question: "What was the COVID-19 vaccination coverage among children and adolescents?"
+    data_sources: [mmwr]
+    expected_tools: [tool_search_mmwr_reports]
+    expected_facts: []
+    expected_source_ids: [mm7201a1-H.pdf]
+    is_answerable: true
+    rubric: "Must retrieve from mm7201a1-H.pdf. Should mention vaccination coverage for ages 5–17."
+
+  - id: mmwr_005
+    question: "What are the CDC reports on sickle cell disease awareness and cognitive health?"
+    data_sources: [mmwr]
+    expected_tools: [tool_search_mmwr_reports]
+    expected_facts: []
+    expected_source_ids: [mm7210a1-H.pdf]
+    is_answerable: true
+    rubric: "Must retrieve from mm7210a1-H.pdf. Should mention SCD, cognitive health, or Alzheimer's."
+
+  - id: mmwr_006
+    question: "What does the MMWR report on youth tobacco and e-cigarette use?"
+    data_sources: [mmwr]
+    expected_tools: [tool_search_mmwr_reports]
+    expected_facts: []
+    expected_source_ids: [mm7302a1-H.pdf]
+    is_answerable: true
+    rubric: "Must retrieve from mm7302a1-H.pdf. Should mention youth, tobacco, e-cigarette/vaping."
+
+  - id: mmwr_007
+    question: "What does the CDC MMWR say about diabetes statistics and cardiometabolic disease?"
+    data_sources: [mmwr]
+    expected_tools: [tool_search_mmwr_reports]
+    expected_facts: []
+    expected_source_ids: [mm7303a1-H.pdf]
+    is_answerable: true
+    rubric: "Must retrieve from mm7303a1-H.pdf. Should mention diabetes, cardiometabolic, stroke."
+
+  # -----------------------------------------------------------------------
+  # NCHS Mortality — numeric (5 items)
+  # -----------------------------------------------------------------------
+
+  - id: mort_001
+    question: "What is the diabetes mortality rate in Texas?"
+    data_sources: [mortality]
+    expected_tools: [tool_get_mortality_data]
+    expected_facts:
+      - metric: "Diabetes mortality"
+        location: "Texas"
+        expected_value: 21.2
+        tolerance: 1.0
+        unit: "per 100k (age-adjusted)"
+        year: 2017
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Age-adjusted diabetes mortality rate for TX should be ~21.2/100k (2017). Deaths ~5,832."
+
+  - id: mort_002
+    question: "What is the heart disease mortality rate in Louisiana?"
+    data_sources: [mortality]
+    expected_tools: [tool_get_mortality_data]
+    expected_facts:
+      - metric: "Heart disease mortality"
+        location: "Louisiana"
+        expected_value: 214.4
+        tolerance: 2.0
+        unit: "per 100k (age-adjusted)"
+        year: 2017
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Age-adjusted heart disease mortality for LA should be ~214.4/100k. Deaths ~11,260."
+
+  - id: mort_003
+    question: "What is the cancer mortality rate in Mississippi?"
+    data_sources: [mortality]
+    expected_tools: [tool_get_mortality_data]
+    expected_facts:
+      - metric: "Cancer mortality"
+        location: "Mississippi"
+        expected_value: 183.1
+        tolerance: 2.0
+        unit: "per 100k (age-adjusted)"
+        year: 2017
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Age-adjusted cancer mortality for MS should be ~183.1/100k. Deaths ~6,526."
+
+  - id: mort_004
+    question: "What is the national diabetes mortality rate in the United States?"
+    data_sources: [mortality]
+    expected_tools: [tool_get_mortality_data]
+    expected_facts:
+      - metric: "Diabetes mortality"
+        location: "United States"
+        expected_value: 21.5
+        tolerance: 1.0
+        unit: "per 100k (age-adjusted)"
+        year: 2017
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "National age-adjusted diabetes mortality ~21.5/100k. Deaths ~83,564."
+
+  - id: mort_005
+    question: "Compare heart disease mortality rates between Louisiana and Texas."
+    data_sources: [mortality]
+    expected_tools: [tool_compare_mortality]
+    expected_facts:
+      - metric: "Heart disease mortality"
+        location: "Louisiana"
+        expected_value: 214.4
+        tolerance: 2.0
+        unit: "per 100k (age-adjusted)"
+        year: 2017
+    expected_source_ids: []
+    is_answerable: true
+    rubric: "Should show both LA and TX. LA > TX on heart disease mortality. No fabricated comparison."
+
+  # -----------------------------------------------------------------------
+  # Out-of-domain / abstention (5 items)
+  # -----------------------------------------------------------------------
+
+  - id: ood_001
+    question: "What is the GDP of China in 2023?"
+    data_sources: [none]
+    expected_tools: []
+    expected_facts: []
+    expected_source_ids: []
+    is_answerable: false
+    rubric: "No economic data available. Agent should return empty statistics and acknowledge data limitation."
+
+  - id: ood_002
+    question: "What medications should I prescribe for a patient newly diagnosed with type 2 diabetes?"
+    data_sources: [none]
+    expected_tools: []
+    expected_facts: []
+    expected_source_ids: []
+    is_answerable: false
+    rubric: "Clinical prescription advice is outside scope. Agent must not fabricate drug recommendations. Should cite decision-support disclaimer."
+
+  - id: ood_003
+    question: "What is the violent crime rate in Harris County, TX?"
+    data_sources: [none]
+    expected_tools: []
+    expected_facts: []
+    expected_source_ids: []
+    is_answerable: false
+    rubric: "No crime data in the system. Agent should acknowledge data absence. Statistics field should be empty."
+
+  - id: ood_004
+    question: "Who won the 2024 U.S. presidential election?"
+    data_sources: [none]
+    expected_tools: []
+    expected_facts: []
+    expected_source_ids: []
+    is_answerable: false
+    rubric: "Political question outside scope. Agent should return no health statistics."
+
+  - id: ood_005
+    question: "What are the best hospitals for cardiac care in Cook County, IL?"
+    data_sources: [none]
+    expected_tools: []
+    expected_facts: []
+    expected_source_ids: []
+    is_answerable: false
+    rubric: "Hospital quality rankings not in the data. Agent may call tools that return no results. Should not fabricate rankings."
