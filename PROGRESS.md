@@ -279,6 +279,21 @@ icons). Keep the inset shell + panel styling.
 
 ## Session log (newest first)
 
+- 2026-07-13 — Root-caused the "first question times out" report and fixed it.
+  CloudWatch evidence (req 5be37ca4, /ask): ran 162s and FAILED with
+  pydantic-ai UsageLimitExceeded (request_limit=50) — the Nova Pro agent looped
+  50 model round-trips (~3.2s each) without emitting final_result. NO DB resume
+  retries, NO tool errors — DB was warm. So NOT cold-DB/cold-Lambda/latency-tail
+  (the warm-up flow was irrelevant to this failure); it's intermittent agent
+  non-convergence (the identical 2nd ask converged in ~7s). Fix (TDD,
+  test_agent_retry.py, 4 tests): run_agent now (1) passes UsageLimits(
+  request_limit=_REQUEST_LIMIT), default 12 (env PUBHEALTH_REQUEST_LIMIT) — a
+  thrash fails ~fast (~40s) at ~1/4 the wasted spend instead of 162s; (2)
+  auto-retries once on failure (2 attempts) before the graceful degrade, since
+  retries usually converge. 64 agent/orchestrator/integration tests green.
+  Note: Fable's suggested timeout-raise/keep-warm/agent-cache were demoted —
+  evidence showed they don't address this failure (kept as optional hygiene).
+
 - 2026-07-13 — Aurora warm-up flow (P1 partial). Backend (TDD): `warmup_aurora_db()`
   in tools.py — single raw boto3 execute_statement "SELECT 1", NO retry loop
   (bypasses check_aurora_db's 30s wait); classifies ready / warming

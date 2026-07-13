@@ -29,6 +29,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.bedrock import BedrockProvider
+from pydantic_ai.usage import UsageLimits
 
 from pubhealth_llm.app.config import get_model
 from pubhealth_llm.app.schemas import PublicHealthResponse
@@ -504,6 +505,19 @@ def _extract_trace(result) -> EvalTrace:
 # ---------------------------------------------------------------------------
 
 
+# Bounded per-run request limit. pydantic-ai defaults to 50, which lets a
+# non-converging ("thrashing") agent burn ~50 model round-trips / ~162s before
+# raising UsageLimitExceeded (observed in prod). A legitimate answer needs only
+# a handful of round-trips, so cap it low: a thrash then fails fast (~40s) and
+# at ~1/4 the wasted token spend. Env-overridable via PUBHEALTH_REQUEST_LIMIT.
+_REQUEST_LIMIT = int(os.environ.get("PUBHEALTH_REQUEST_LIMIT", "12"))
+
+# The agent loop is non-deterministic — an intermittent thrash usually converges
+# on a fresh attempt (confirmed: the same question that thrashed succeeded on a
+# manual re-ask). Retry once (2 attempts total) before degrading gracefully.
+_AGENT_MAX_RETRIES = 1
+
+
 async def run_agent(
     question: str,
     message_history: Optional[list] = None,
@@ -539,33 +553,43 @@ async def run_agent(
     agent = _build_agent(model_str)
     logger.info("Running agent (model=%r) for question: %r", model_str, question)
 
-    try:
-        result = await agent.run(
-            question,
-            message_history=message_history or [],
-        )
-        response: PublicHealthResponse = result.output
-        tools_used = _extract_tools_used(result)
-        trace = _extract_trace(result) if _capture_trace else None
-        _log_query(question, response.summary[:200])
-        return AgentResult(response=response, tools_used=tools_used, trace=trace)
+    max_attempts = 1 + _AGENT_MAX_RETRIES
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = await agent.run(
+                question,
+                message_history=message_history or [],
+                usage_limits=UsageLimits(request_limit=_REQUEST_LIMIT),
+            )
+            response: PublicHealthResponse = result.output
+            tools_used = _extract_tools_used(result)
+            trace = _extract_trace(result) if _capture_trace else None
+            _log_query(question, response.summary[:200])
+            return AgentResult(response=response, tools_used=tools_used, trace=trace)
 
-    except Exception as exc:
-        logger.error("Agent run failed: %s", exc, exc_info=True)
-        # Return a structured error response rather than raising
-        return AgentResult(
-            response=PublicHealthResponse(
-                summary=(
-                    "I encountered an error while processing your question. "
-                    "Please try rephrasing or check that the data pipeline has been run."
-                ),
-                evidence=[f"Error details: {str(exc)[:300]}"],
-                caveats=[
-                    "The data ingestion pipeline may not have been run yet.",
-                    "Check that the required API key for the selected model is set in your .env file.",
-                ],
-                sources=["No data retrieved due to error."],
+        except Exception as exc:
+            last_exc = exc
+            logger.error(
+                "Agent run failed (attempt %d/%d): %s",
+                attempt, max_attempts, exc, exc_info=True,
+            )
+            # Fall through: retry if attempts remain, else degrade gracefully.
+
+    # All attempts exhausted — return a structured error response rather than raising.
+    return AgentResult(
+        response=PublicHealthResponse(
+            summary=(
+                "I encountered an error while processing your question. "
+                "Please try rephrasing or check that the data pipeline has been run."
             ),
-            tools_used=[],
-            trace=None,
-        )
+            evidence=[f"Error details: {str(last_exc)[:300]}"],
+            caveats=[
+                "The data ingestion pipeline may not have been run yet.",
+                "Check that the required API key for the selected model is set in your .env file.",
+            ],
+            sources=["No data retrieved due to error."],
+        ),
+        tools_used=[],
+        trace=None,
+    )
