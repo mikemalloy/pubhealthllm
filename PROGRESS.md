@@ -262,10 +262,13 @@ icons). Keep the inset shell + panel styling.
       item DIRECTLY after Home, icon `SquareFunction`. NOT auth-gated. Use the
       same panel styling as the other pages.
 
-- [ ] **P1. `/ask` ~29s in prod.** Diagnose cold-start vs agentic loop (two
-      consecutive calls). If loop → SSE streaming for perceived latency (parked
-      in §3a); secondary: faster-model routing for simple Qs, result caching,
-      keep-warm to avoid cold start.
+- [~] **P1. `/ask` ~29s in prod.** PARTIALLY ADDRESSED. Cold-DB component
+      mitigated: `GET /warmup` (Clerk-guarded, single-attempt, no-retry Aurora
+      ping) added to server.py; frontend warms Aurora on `/llm` mount with an
+      honest "warming up" indicator + polls to ready, and passes a 120s timeout
+      for the first question asked while warming. Aurora auto-pause KEPT (cost).
+      STILL OPEN: agentic-loop latency → SSE streaming for perceived latency
+      (parked in §3a); secondary: faster-model routing, result caching.
 - [ ] **Rate limit `/ask`** (deferred B4) — prereq met (spend cap set). Add
       `slowapi`, per-user key, env-configurable limit.
 - [ ] Narrow CORS `allow_headers` to `["Authorization", "Content-Type"]`.
@@ -275,6 +278,26 @@ icons). Keep the inset shell + panel styling.
 ---
 
 ## Session log (newest first)
+
+- 2026-07-13 — Aurora warm-up flow (P1 partial). Backend (TDD): `warmup_aurora_db()`
+  in tools.py — single raw boto3 execute_statement "SELECT 1", NO retry loop
+  (bypasses check_aurora_db's 30s wait); classifies ready / warming
+  (DatabaseResumingException — the failed attempt itself starts the resume) /
+  error (class name only, no ARN/config leak). `GET /warmup` in server.py,
+  Depends(clerk_guard) like /ask, never 500s. 8 new tests in test_warmup.py
+  (helper ready/warming-no-retry/error×2 + endpoint ready/warming/error-no-leak/
+  401) all green; full suite unchanged (pre-existing live-AWS + mangum-venv
+  failures only). Frontend: `warmupDatabase(token, signal)` in api.ts (10s
+  timeout); askQuestion gained optional timeoutMs (default 60s). LlmChat.tsx:
+  warms Aurora on mount, polls every 5s ≤24× then gives up silent; calm pulsing
+  "Waking up the health database…" indicator near input + brief "Database ready";
+  submit-while-warming uses warming thinking-copy + 120s timeout. Deployed:
+  Lambda code swapped via `aws lambda update-function-code` (terraform plan was
+  cosmetic-only, no source_code_hash); frontend `vercel deploy --prod` →
+  pubhealth.chefmike.dev Ready. Verified headless: /health 200, /warmup no-token
+  → 403 (guard confirmed). Authed ready/warming body capture PENDING — prod
+  Clerk sk_live not retrievable headlessly (Vercel encrypted-var pull returns
+  empty); needs the secret or a signed-in browser check.
 
 - 2026-06-10 — T3 (Terraform variables + outputs) complete. Created terraform/6_backend/
   directory. Added variables.tf: 11 variables (project_name, aws_region,

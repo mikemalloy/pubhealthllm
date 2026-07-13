@@ -153,6 +153,45 @@ def check_aurora_db() -> None:
         raise RuntimeError("Aurora ping returned None — cluster may be unavailable")
 
 
+def warmup_aurora_db() -> dict:
+    """Fast, single-attempt Aurora ping used by the GET /warmup endpoint.
+
+    Unlike ``check_aurora_db()`` this NEVER retries and NEVER blocks on the
+    resume window — it fires exactly one ``SELECT 1`` via the raw boto3 Data
+    API client and returns immediately. The failed attempt against a paused
+    cluster is itself what initiates the auto-resume, so returning "warming"
+    right away is correct: the wake-up is already underway.
+
+    Returns a small dict, never raises:
+        {"database": "ready"}    — query succeeded, cluster is up
+        {"database": "warming"}  — DatabaseResumingException (resume in progress)
+        {"database": "error", "detail": "<ExceptionClassName>"} — anything else
+
+    The error ``detail`` is the exception class name only — never the message,
+    ARNs, or config — so an authenticated caller learns nothing exploitable.
+    """
+    try:
+        db = get_db()
+        # Raw boto3 path — deliberately bypasses DataAPIClient.execute()'s
+        # DatabaseResumingException retry loop.
+        db.client.execute_statement(
+            resourceArn=db.cluster_arn,
+            secretArn=db.secret_arn,
+            database=db.database,
+            sql="SELECT 1",
+        )
+        return {"database": "ready"}
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "DatabaseResumingException":
+            logger.info("Aurora warm-up: cluster resuming from auto-pause (warming)")
+            return {"database": "warming"}
+        logger.warning("Aurora warm-up: unexpected ClientError (%s)", type(exc).__name__)
+        return {"database": "error", "detail": type(exc).__name__}
+    except Exception as exc:
+        logger.warning("Aurora warm-up: unexpected error (%s)", type(exc).__name__)
+        return {"database": "error", "detail": type(exc).__name__}
+
+
 # ---------------------------------------------------------------------------
 # Aurora Data API helper
 # ---------------------------------------------------------------------------

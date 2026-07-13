@@ -10,7 +10,12 @@ from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
 from pubhealth_llm.app.config import validate_model_config
 from pubhealth_llm.app.orchestrator import run_ask
 from pubhealth_llm.app.schemas import AskRequest, AskResponse, MeasureItem
-from pubhealth_llm.app.tools import check_aurora_db, check_vector_store, list_available_measures
+from pubhealth_llm.app.tools import (
+    check_aurora_db,
+    check_vector_store,
+    list_available_measures,
+    warmup_aurora_db,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +150,26 @@ async def ask(req: AskRequest, _: Any = Depends(clerk_guard)) -> AskResponse:
     Requires: valid Clerk JWT in Authorization header.
     """
     return await run_ask(req.question, req.message_history)
+
+
+@app.get("/warmup")
+async def warmup(_: Any = Depends(clerk_guard)) -> dict:
+    """Trigger Aurora Serverless v2 auto-resume and report DB readiness.
+
+    Aurora auto-pauses after idle to save cost; the first /ask after a quiet
+    period otherwise eats a 30s cold-resume. The frontend pings this on /llm
+    mount so the resume is already underway by the time the user asks.
+
+    Fast and single-attempt — it does NOT block on the resume window. One
+    lightweight SELECT 1 (no retry). See ``warmup_aurora_db``:
+        {"database": "ready"}   — cluster is up
+        {"database": "warming"} — resume in progress (the ping itself started it)
+        {"database": "error", "detail": "<ClassName>"} — any failure, never 500
+
+    Clerk-guarded exactly like /ask — an unauthenticated endpoint that wakes
+    the database would invite abuse that defeats auto-pause.
+    """
+    return warmup_aurora_db()
 
 
 @app.get("/measures", response_model=list[MeasureItem])

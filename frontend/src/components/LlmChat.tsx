@@ -14,7 +14,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
-import { askQuestion } from "@/lib/api";
+import { askQuestion, warmupDatabase } from "@/lib/api";
 
 // ── Content constants ────────────────────────────────────────────────────────
 
@@ -42,12 +42,21 @@ const EXAMPLE_PROMPTS = [
   "Which counties have the highest adult smoking rates?",
 ];
 
-// Sentinel value for the "thinking" bubble
+// Sentinel values for the "thinking" bubble. The warming variant is used for
+// the first answer requested while the database is still resuming from
+// auto-pause — that response can legitimately take up to a minute.
 const THINKING_SENTINEL = "__thinking__";
+const THINKING_WARMING_SENTINEL = "__thinking_warming__";
+
+// Warm-up polling: check every 5s, up to ~2 min, then give up silently.
+const WARMUP_POLL_MS = 5_000;
+const WARMUP_MAX_ATTEMPTS = 24;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Role = "user" | "assistant";
+
+type DbStatus = "warming" | "ready" | "unknown";
 
 interface Message {
   id: number;
@@ -59,7 +68,8 @@ interface Message {
 
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === "user";
-  const isThinking = msg.text === THINKING_SENTINEL;
+  const isWarmingThinking = msg.text === THINKING_WARMING_SENTINEL;
+  const isThinking = msg.text === THINKING_SENTINEL || isWarmingThinking;
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -72,10 +82,48 @@ function MessageBubble({ msg }: { msg: Message }) {
           isThinking && "italic text-muted-foreground"
         )}
       >
-        {isThinking ? "Thinking…" : msg.text}
+        {isThinking
+          ? isWarmingThinking
+            ? "The database is still waking up, so this first answer may take up to a minute…"
+            : "Thinking…"
+          : msg.text}
       </div>
     </div>
   );
+}
+
+// Calm, non-modal status line shown near the chat input while the health
+// database resumes from auto-pause (and a brief "ready" confirmation after).
+function DbStatusIndicator({
+  status,
+  showReady,
+}: {
+  status: DbStatus;
+  showReady: boolean;
+}) {
+  if (status === "warming") {
+    return (
+      <div className="flex items-start gap-2 px-1 pb-2 text-xs text-muted-foreground">
+        <span className="relative mt-1 flex h-2 w-2 shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+        </span>
+        <span>
+          Waking up the health database — this takes about 30 seconds after a
+          quiet period. You can type your question now.
+        </span>
+      </div>
+    );
+  }
+  if (showReady) {
+    return (
+      <div className="flex items-center gap-2 px-1 pb-2 text-xs text-muted-foreground">
+        <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-green-500" />
+        <span>Database ready.</span>
+      </div>
+    );
+  }
+  return null;
 }
 
 function ArtifactPanel({ markdown }: { markdown: string }) {
@@ -130,10 +178,13 @@ export default function LlmChat() {
   const [artifact, setArtifact] = useState(WELCOME_MD);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<DbStatus>("unknown");
+  const [showReady, setShowReady] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<PanelImperativeHandle | null>(null);
   const nextId = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const prevDbStatus = useRef<DbStatus>("unknown");
 
   // Fix I1: scroll to bottom whenever messages change
   useEffect(() => {
@@ -146,6 +197,79 @@ export default function LlmChat() {
       abortRef.current?.abort();
     };
   }, []);
+
+  // Warm up Aurora on mount: it auto-pauses after idle, so the first /ask after
+  // a quiet period otherwise eats a ~30s cold resume. Ping /warmup immediately;
+  // if the DB is resuming, poll until it's ready. Best-effort — any failure
+  // fails silent (per-request retries still cover a cold DB) and never breaks
+  // the page.
+  useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, ms);
+        controller.signal.addEventListener("abort", () => {
+          clearTimeout(t);
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+
+    const runWarmup = async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+
+        let status = await warmupDatabase(token, controller.signal);
+        if (cancelled) return;
+        if (status !== "warming") {
+          setDbStatus("ready");
+          return;
+        }
+
+        // Cluster is resuming — show the indicator and poll until ready.
+        setDbStatus("warming");
+        for (let attempt = 0; attempt < WARMUP_MAX_ATTEMPTS && !cancelled; attempt++) {
+          await sleep(WARMUP_POLL_MS);
+          if (cancelled) return;
+          try {
+            status = await warmupDatabase(token, controller.signal);
+          } catch {
+            continue; // transient — keep polling
+          }
+          if (status === "ready") {
+            setDbStatus("ready");
+            return;
+          }
+        }
+        // Gave up after ~2 min — treat as ready; the per-request retry logic
+        // still covers a slow resume.
+        if (!cancelled) setDbStatus("ready");
+      } catch {
+        // Fail silent — warm-up must never break the page.
+        if (!cancelled) setDbStatus("ready");
+      }
+    };
+
+    void runWarmup();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [getToken]);
+
+  // Briefly confirm "Database ready" when the resume completes, then hide.
+  useEffect(() => {
+    if (prevDbStatus.current === "warming" && dbStatus === "ready") {
+      setShowReady(true);
+      const t = setTimeout(() => setShowReady(false), 2500);
+      prevDbStatus.current = dbStatus;
+      return () => clearTimeout(t);
+    }
+    prevDbStatus.current = dbStatus;
+  }, [dbStatus]);
 
   const handleSubmit = async () => {
     const text = input.trim();
@@ -168,10 +292,16 @@ export default function LlmChat() {
       return;
     }
 
+    // If the database is still resuming, acknowledge it in the thinking bubble
+    // and give this first request a longer timeout — a cold-resume answer can
+    // take up to a minute.
+    const warming = dbStatus === "warming";
+    const thinkingText = warming ? THINKING_WARMING_SENTINEL : THINKING_SENTINEL;
+
     // Fix C1: store thinkingId so we can remove by ID (not slice)
     const thinkingId = nextId.current++;
     const userMsg: Message = { id: nextId.current++, role: "user", text };
-    const thinkingMsg: Message = { id: thinkingId, role: "assistant", text: THINKING_SENTINEL };
+    const thinkingMsg: Message = { id: thinkingId, role: "assistant", text: thinkingText };
     setMessages((prev) => [...prev, userMsg, thinkingMsg]);
 
     // Fix I3: abort any previous in-flight request, set up new controller
@@ -180,7 +310,12 @@ export default function LlmChat() {
     abortRef.current = controller;
 
     try {
-      const resp = await askQuestion(text, token, controller.signal);
+      const resp = await askQuestion(
+        text,
+        token,
+        controller.signal,
+        warming ? 120_000 : 60_000
+      );
       // Fix I4: null-coalesce chat_message
       const assistantText = resp.chat_message ?? "No response received.";
 
@@ -293,6 +428,11 @@ export default function LlmChat() {
               <MessageBubble key={msg.id} msg={msg} />
             ))}
             <div ref={chatEndRef} />
+          </div>
+
+          {/* DB warm-up status (calm, non-modal) */}
+          <div className="shrink-0 px-3 pt-2">
+            <DbStatusIndicator status={dbStatus} showReady={showReady} />
           </div>
 
           {/* Pinned input */}
