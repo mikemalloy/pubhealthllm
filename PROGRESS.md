@@ -294,10 +294,15 @@ icons). Keep the inset shell + panel styling.
   submit-while-warming uses warming thinking-copy + 120s timeout. Deployed:
   Lambda code swapped via `aws lambda update-function-code` (terraform plan was
   cosmetic-only, no source_code_hash); frontend `vercel deploy --prod` →
-  pubhealth.chefmike.dev Ready. Verified headless: /health 200, /warmup no-token
-  → 403 (guard confirmed). Authed ready/warming body capture PENDING — prod
-  Clerk sk_live not retrievable headlessly (Vercel encrypted-var pull returns
-  empty); needs the secret or a signed-in browser check.
+  pubhealth.chefmike.dev Ready. LIVE VERIFIED (prod SaaS Clerk instance, token
+  minted from an active session — sessions.create is dev-only on prod):
+  /health 200; /warmup no-token → 403 (guard); authed /warmup against a paused
+  Aurora → {"database":"warming"} then {"database":"warming"} then
+  {"database":"ready"} after ~10s (single-attempt ping started the resume);
+  authed /ask (Travis diabetes) → 200 mode=artifact, tool_get_health_statistics,
+  7.4s on the now-warm DB (vs ~29s cold). Prod Clerk sk_live is not retrievable
+  headlessly (Vercel encrypted-var pull returns empty) — user supplied it for
+  the test; key to be rotated.
 
 - 2026-06-10 — T3 (Terraform variables + outputs) complete. Created terraform/6_backend/
   directory. Added variables.tf: 11 variables (project_name, aws_region,
